@@ -1,3 +1,4 @@
+mod config;
 pub mod mirror;
 pub mod package;
 
@@ -8,7 +9,7 @@ use axum::{
     routing::{get, put},
     Json, Router,
 };
-use package::Package;
+use config::Config;
 use serde_json::{json, Value};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -54,29 +55,45 @@ async fn add_crate(body: Bytes) {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), anyhow::Error> {
     // Initialise logging system
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "altreg=debug,tower_http=debug".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "altreg=debug,tower_http=info".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
+
+    let config = config::load().with_context(|| "unable to load config")?;
+
+    // Directory checks
+    if !config.data_dir.exists() {
+        fs::create_dir(&config.data_dir).with_context(|| "unable to create data dir")?;
+    }
+    let crates_dir = config.data_dir.join("crates");
+    if !crates_dir.exists() {
+        fs::create_dir(&crates_dir).with_context(|| "unable to create crate cache dir")?;
+    }
+
+    let listen_addr = SocketAddr::new(config.host, config.port);
 
     let app = Router::new()
         .route("/config.json", get(index))
         .route("/crates/:crate_name/:version/download", get(crate_download))
         .route("/api/v1/crates/new", put(add_crate))
         .fallback(get(crate_fallback))
+        .layer(Extension(config))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),
         );
 
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    axum::Server::bind(&listen_addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
+
+    Ok(())
 }
 
 pub fn crate_prefix(name: &str) -> String {
