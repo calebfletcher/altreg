@@ -1,5 +1,6 @@
-use altreg::crate_prefix;
 use axum::body::Bytes;
+
+use crate::crate_prefix;
 
 static CRATES_IO_INDEX: &str = "https://index.crates.io";
 static CRATES_IO_INDEX_DL: &str = "https://crates.io/api/v1/crates";
