@@ -10,7 +10,7 @@ _Name is a working title and is subject to change._
 ### 0.1.0
 - [x] crates.io passthrough for all requests
 ### 0.2.0
-- [ ] Hot caching of upstream .crate files
+- [x] Hot caching of upstream .crate files
 - [ ] Hot caching of upstream index files
 - [ ] Tool to provide full mirrors of upstream for offline caches
 ### 0.3.0
@@ -49,7 +49,7 @@ Run registry:
 Add registry to Cargo's config by putting the following into either your global `~/.cargo/config.toml` or your project's `.cargo/config.toml`:
 ```
 [registries.private]
-index = "http://localhost:3000"
+index = "http://localhost:1491"
 ```
 This assumes you want the registry to be named `private` and is running on your local machine on port 3000. Update these as required.
 

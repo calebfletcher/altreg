@@ -2,20 +2,25 @@ mod config;
 pub mod mirror;
 pub mod package;
 
+use std::{fs, net::SocketAddr};
+
+use anyhow::Context;
 use axum::{
     body::Bytes,
     extract::Path,
     http::Uri,
     routing::{get, put},
-    Json, Router,
+    Extension, Json, Router,
 };
 use config::Config;
 use serde_json::{json, Value};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-async fn index() -> Json<Value> {
-    Json(json!({ "dl": "http://localhost:3000/crates", "api": "http://localhost:3000" }))
+async fn index(Extension(state): Extension<Config>) -> Json<Value> {
+    let host = format!("http://{}:{}", state.host, state.port);
+    Json(json!({ "dl": host.clone() + "/crates", "api": host }))
 }
 
 async fn crate_fallback(uri: Uri) -> String {
@@ -44,10 +49,32 @@ async fn crate_fallback(uri: Uri) -> String {
     mirror::get_package(crate_name).await.unwrap()
 }
 
-async fn crate_download(Path((crate_name, version)): Path<(String, String)>) -> Bytes {
-    println!("downloading {} {}", crate_name, version);
+async fn crate_download(
+    Path((crate_name, version)): Path<(String, String)>,
+    Extension(state): Extension<Config>,
+) -> Bytes {
+    let cache_path = state
+        .data_dir
+        .join("crates")
+        .join(crate_path(&crate_name, &version));
+    if cache_path.exists() {
+        let mut file = tokio::fs::File::open(cache_path).await.unwrap();
+        let mut buf = Vec::with_capacity(file.metadata().await.unwrap().len() as usize);
+        file.read_to_end(&mut buf).await.unwrap();
 
-    mirror::download_crate(&crate_name, version).await.unwrap()
+        buf.into()
+    } else {
+        let bytes = mirror::download_crate(&crate_name, &version).await.unwrap();
+
+        let parent = cache_path.parent().unwrap();
+        if !parent.exists() {
+            tokio::fs::create_dir_all(parent).await.unwrap();
+        }
+        let mut file = tokio::fs::File::create(cache_path).await.unwrap();
+        file.write_all(&bytes).await.unwrap();
+
+        bytes
+    }
 }
 
 async fn add_crate(body: Bytes) {
@@ -96,7 +123,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-pub fn crate_prefix(name: &str) -> String {
+fn crate_prefix(name: &str) -> String {
     match name.len() {
         1 => "1".to_owned(),
         2 => "2".to_owned(),
@@ -106,6 +133,10 @@ pub fn crate_prefix(name: &str) -> String {
             format!("{}{}/{}{}", chars[0], chars[1], chars[2], chars[3])
         }
     }
+}
+
+fn crate_path(name: &str, version: &str) -> String {
+    format!("{}/{}/download", name, version)
 }
 
 #[cfg(test)]
