@@ -58,6 +58,7 @@ async fn crate_download(
         .join("crates")
         .join(crate_path(&crate_name, &version));
     if cache_path.exists() {
+        tracing::info!("using cached {crate_name}@{version}");
         let mut file = tokio::fs::File::open(cache_path).await.unwrap();
         let mut buf = Vec::with_capacity(file.metadata().await.unwrap().len() as usize);
         file.read_to_end(&mut buf).await.unwrap();
@@ -86,7 +87,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initialise logging system
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "altreg=debug,tower_http=info".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "altreg=info,tower_http=info".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();

@@ -14,4 +14,5 @@ serde_json = "1.0.85"
 tokio = { version = "1.20.1", features = ["full"] }
 toml = "0.5.9"
 tower-http = { version = "0.3.4", features = ["trace"] }
+tracing = "0.1.36"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
