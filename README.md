@@ -11,7 +11,7 @@ _Name is a working title and is subject to change._
 - [x] crates.io passthrough for all requests
 ### 0.2.0
 - [x] Hot caching of upstream .crate files
-- [ ] Hot caching of upstream index files
+- [x] Hot caching of upstream index files
 - [ ] Tool to provide full mirrors of upstream for offline caches
 ### 0.3.0
 - [ ] Index base inheritance
