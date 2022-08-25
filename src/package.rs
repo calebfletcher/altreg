@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct Dependency {
     pub name: String,
     pub req: String,
-    pub features: String,
+    pub features: Vec<String>,
     pub optional: bool,
     pub default_features: bool,
     pub target: Option<String>,
@@ -24,6 +24,6 @@ pub struct Package {
     pub features: HashMap<String, Vec<String>>,
     pub yanked: bool,
     pub links: Option<String>,
-    pub v: usize,
-    pub features2: HashMap<String, Vec<String>>,
+    pub v: Option<usize>,
+    pub features2: Option<HashMap<String, Vec<String>>>,
 }

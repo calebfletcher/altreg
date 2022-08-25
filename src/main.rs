@@ -16,37 +16,54 @@ use config::Config;
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use crate::package::Package;
 
 async fn index(Extension(state): Extension<Config>) -> Json<Value> {
     let host = format!("http://{}:{}", state.host, state.port);
     Json(json!({ "dl": host.clone() + "/crates", "api": host }))
 }
 
-async fn crate_fallback(uri: Uri) -> String {
-    let parts = uri
+async fn crate_fallback(uri: Uri, Extension(db): Extension<sled::Db>) -> String {
+    let mut parts = uri
         .path()
         .split('/')
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>();
+    let crate_name = parts.pop().unwrap();
 
-    let crate_name = parts.last().unwrap();
+    let cache_entry = db.get(crate_name).unwrap();
+    if let Some(entry) = cache_entry {
+        info!("found crate in cache");
 
-    // let package = Package {
-    //     name: crate_name.to_string(),
-    //     vers: "4.2.0".to_owned(),
-    //     deps: vec![],
-    //     cksum: "".to_owned(),
-    //     features: HashMap::new(),
-    //     yanked: false,
-    //     links: None,
-    //     v: 2,
-    //     features2: HashMap::new(),
-    // };
+        let versions: Vec<Package> = bincode::deserialize(&entry).unwrap();
 
-    //serde_json::to_string(&package).unwrap()
+        versions
+            .into_iter()
+            .map(|version| serde_json::to_string(&version).unwrap())
+            .fold(String::new(), |mut acc, item| {
+                acc.push_str(&item);
+                acc.push('\n');
+                acc
+            })
+    } else {
+        info!("pulling crate metadata from upstream");
+        let upstream = mirror::get_package(crate_name).await.unwrap();
 
-    mirror::get_package(crate_name).await.unwrap()
+        // Upstream JSON format to binary representation
+        let versions: Vec<Package> = upstream
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+
+        // Insert binary representation into database
+        db.insert(crate_name, bincode::serialize(&versions).unwrap())
+            .unwrap();
+
+        upstream
+    }
 }
 
 async fn crate_download(
@@ -93,6 +110,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .init();
 
     let config = config::load().with_context(|| "unable to load config")?;
+    let db = sled::open(config.data_dir.join("db"))?;
 
     // Directory checks
     if !config.data_dir.exists() {
@@ -111,6 +129,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/api/v1/crates/new", put(add_crate))
         .fallback(get(crate_fallback))
         .layer(Extension(config))
+        .layer(Extension(db))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),
