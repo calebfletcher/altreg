@@ -13,6 +13,7 @@ use axum::{
     Extension, Json, Router,
 };
 use config::Config;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
@@ -20,6 +21,12 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::package::Package;
+
+#[derive(Serialize, Deserialize)]
+struct Entry {
+    versions: Vec<Package>,
+    time_of_last_update: chrono::DateTime<chrono::Utc>,
+}
 
 async fn index(Extension(state): Extension<Config>) -> Json<Value> {
     let host = format!("http://{}:{}", state.host, state.port);
@@ -37,33 +44,45 @@ async fn crate_fallback(uri: Uri, Extension(db): Extension<sled::Db>) -> String 
     let cache_entry = db.get(crate_name).unwrap();
     if let Some(entry) = cache_entry {
         info!("found crate in cache");
+        let entry: Entry = bincode::deserialize(&entry).unwrap();
 
-        let versions: Vec<Package> = bincode::deserialize(&entry).unwrap();
+        if chrono::Utc::now() - entry.time_of_last_update < chrono::Duration::minutes(30) {
+            return entry
+                .versions
+                .into_iter()
+                .map(|version| serde_json::to_string(&version).unwrap())
+                .fold(String::new(), |mut acc, item| {
+                    acc.push_str(&item);
+                    acc.push('\n');
+                    acc
+                });
+        } else {
+            // Expired crate
+            info!("crate in cache has expired");
 
-        versions
-            .into_iter()
-            .map(|version| serde_json::to_string(&version).unwrap())
-            .fold(String::new(), |mut acc, item| {
-                acc.push_str(&item);
-                acc.push('\n');
-                acc
-            })
-    } else {
-        info!("pulling crate metadata from upstream");
-        let upstream = mirror::get_package(crate_name).await.unwrap();
+            db.remove(crate_name).unwrap();
+        }
+    };
 
-        // Upstream JSON format to binary representation
-        let versions: Vec<Package> = upstream
-            .lines()
-            .map(|line| serde_json::from_str(line).unwrap())
-            .collect();
+    info!("pulling crate metadata from upstream");
+    let upstream = mirror::get_package(crate_name).await.unwrap();
 
-        // Insert binary representation into database
-        db.insert(crate_name, bincode::serialize(&versions).unwrap())
-            .unwrap();
+    // Upstream JSON format to binary representation
+    let versions: Vec<Package> = upstream
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
 
-        upstream
-    }
+    let entry = Entry {
+        versions,
+        time_of_last_update: chrono::Utc::now(),
+    };
+
+    // Insert binary representation into database
+    db.insert(crate_name, bincode::serialize(&entry).unwrap())
+        .unwrap();
+
+    upstream
 }
 
 async fn crate_download(
