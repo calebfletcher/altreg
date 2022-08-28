@@ -4,18 +4,23 @@ pub mod package;
 
 use std::{fs, net::SocketAddr};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use axum::{
     body::Bytes,
     extract::Path,
+    http::StatusCode,
     http::Uri,
+    response::IntoResponse,
     routing::{get, put},
     Extension, Json, Router,
 };
 use config::Config;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncWriteExt},
+};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -28,50 +33,85 @@ struct Entry {
     time_of_last_update: chrono::DateTime<chrono::Utc>,
 }
 
+struct InternalError(anyhow::Error);
+
+impl IntoResponse for InternalError {
+    fn into_response(self) -> axum::response::Response {
+        tracing::warn!("stacktrace: {:?}", self.0);
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "something went wrong",
+        )
+            .into_response()
+    }
+}
+
+impl<T: Into<anyhow::Error>> From<T> for InternalError {
+    fn from(e: T) -> Self {
+        Self(e.into())
+    }
+}
+
 async fn index(Extension(state): Extension<Config>) -> Json<Value> {
     let host = format!("http://{}:{}", state.host, state.port);
     Json(json!({ "dl": host.clone() + "/crates", "api": host }))
 }
 
-async fn crate_fallback(uri: Uri, Extension(db): Extension<sled::Db>) -> String {
-    let mut parts = uri
-        .path()
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
-    let crate_name = parts.pop().unwrap();
+async fn crate_fallback(
+    uri: Uri,
+    Extension(db): Extension<sled::Db>,
+) -> Result<(StatusCode, String), InternalError> {
+    let crate_name = match uri.path().split('/').filter(|part| !part.is_empty()).last() {
+        Some(name) => name,
+        None => Err(anyhow!("unable to find crate"))?,
+    };
 
-    let cache_entry = db.get(crate_name).unwrap();
+    let cache_entry = db
+        .get(crate_name)
+        .with_context(|| "could not access cache entry")?;
     if let Some(entry) = cache_entry {
         info!("found crate in cache");
-        let entry: Entry = bincode::deserialize(&entry).unwrap();
+        let entry: Entry = bincode::deserialize(&entry)
+            .with_context(|| "could not deserialise metadata in cache entry")?;
 
         if chrono::Utc::now() - entry.time_of_last_update < chrono::Duration::minutes(30) {
             return entry
                 .versions
                 .into_iter()
-                .map(|version| serde_json::to_string(&version).unwrap())
-                .fold(String::new(), |mut acc, item| {
-                    acc.push_str(&item);
+                .map(|version| serde_json::to_string(&version))
+                .try_fold(String::new(), |mut acc, item| {
+                    acc.push_str(
+                        &item.with_context(|| "could not convert version metadata to json")?,
+                    );
                     acc.push('\n');
-                    acc
-                });
+                    Ok(acc)
+                })
+                .map(|metadata| (StatusCode::OK, metadata));
         } else {
             // Expired crate
             info!("crate in cache has expired");
 
-            db.remove(crate_name).unwrap();
+            db.remove(crate_name)
+                .with_context(|| "could not remove entry from cache")?;
         }
     };
 
     info!("pulling crate metadata from upstream");
-    let upstream = mirror::get_package(crate_name).await.unwrap();
+    let upstream = mirror::get_package(crate_name)
+        .await
+        .with_context(|| "could not get package from upstream")?;
+
+    let upstream = match upstream {
+        Some(value) => value,
+        None => return Ok((StatusCode::NOT_FOUND, "not found".to_owned())),
+    };
 
     // Upstream JSON format to binary representation
     let versions: Vec<Package> = upstream
         .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect();
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()
+        .with_context(|| "could not parse upstream json metadata")?;
 
     let entry = Entry {
         versions,
@@ -79,38 +119,46 @@ async fn crate_fallback(uri: Uri, Extension(db): Extension<sled::Db>) -> String 
     };
 
     // Insert binary representation into database
-    db.insert(crate_name, bincode::serialize(&entry).unwrap())
-        .unwrap();
+    db.insert(
+        crate_name,
+        bincode::serialize(&entry).with_context(|| "could not serialise cache entry")?,
+    )
+    .with_context(|| "could not insert cache entry")?;
 
-    upstream
+    Ok((StatusCode::OK, upstream))
 }
 
 async fn crate_download(
     Path((crate_name, version)): Path<(String, String)>,
     Extension(state): Extension<Config>,
-) -> Bytes {
+) -> Result<(StatusCode, Bytes), InternalError> {
     let cache_path = state
         .data_dir
         .join("crates")
         .join(crate_path(&crate_name, &version));
     if cache_path.exists() {
         tracing::info!("using cached {crate_name}@{version}");
-        let mut file = tokio::fs::File::open(cache_path).await.unwrap();
-        let mut buf = Vec::with_capacity(file.metadata().await.unwrap().len() as usize);
-        file.read_to_end(&mut buf).await.unwrap();
+        let mut file = File::open(cache_path).await?;
+        let mut buf = Vec::with_capacity(file.metadata().await?.len() as usize);
+        file.read_to_end(&mut buf).await?;
 
-        buf.into()
+        Ok((StatusCode::OK, buf.into()))
     } else {
-        let bytes = mirror::download_crate(&crate_name, &version).await.unwrap();
+        let bytes = match mirror::download_crate(&crate_name, &version).await? {
+            Some(bytes) => bytes,
+            None => return Ok((StatusCode::NOT_FOUND, Bytes::new())),
+        };
 
-        let parent = cache_path.parent().unwrap();
+        let parent = cache_path
+            .parent()
+            .ok_or_else(|| anyhow!("invalid cache path"))?;
         if !parent.exists() {
-            tokio::fs::create_dir_all(parent).await.unwrap();
+            tokio::fs::create_dir_all(parent).await?;
         }
-        let mut file = tokio::fs::File::create(cache_path).await.unwrap();
-        file.write_all(&bytes).await.unwrap();
+        let mut file = File::create(cache_path).await?;
+        file.write_all(&bytes).await?;
 
-        bytes
+        Ok((StatusCode::OK, bytes))
     }
 }
 
@@ -156,8 +204,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     axum::Server::bind(&listen_addr)
         .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .await?;
 
     Ok(())
 }
