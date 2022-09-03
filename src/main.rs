@@ -52,15 +52,22 @@ impl<T: Into<anyhow::Error>> From<T> for InternalError {
     }
 }
 
-async fn index(Extension(state): Extension<Config>) -> Json<Value> {
-    let host = format!("http://{}:{}", state.host, state.port);
-    Json(json!({ "dl": host.clone() + "/crates", "api": host }))
+async fn index(Extension(config): Extension<Config>) -> Json<Value> {
+    Json(json!({ "dl": config.external_url.clone() + "/crates", "api": config.external_url }))
 }
 
 async fn crate_fallback(
     uri: Uri,
     Extension(db): Extension<sled::Db>,
 ) -> Result<(StatusCode, String), InternalError> {
+    if let Some(part) = uri.path().split('/').nth(1) {
+        if part != "index" {
+            return Ok((StatusCode::NOT_FOUND, "not found".to_owned()));
+        }
+    } else {
+        return Ok((StatusCode::NOT_FOUND, "not found".to_owned()));
+    }
+
     let crate_name = match uri.path().split('/').filter(|part| !part.is_empty()).last() {
         Some(name) => name,
         None => Err(anyhow!("unable to find crate"))?,
@@ -191,7 +198,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let listen_addr = SocketAddr::new(config.host, config.port);
 
     let app = Router::new()
-        .route("/config.json", get(index))
+        .route("/index/config.json", get(index))
         .route("/crates/:crate_name/:version/download", get(crate_download))
         .route("/api/v1/crates/new", put(add_crate))
         .fallback(get(crate_fallback))

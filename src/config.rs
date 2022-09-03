@@ -8,6 +8,7 @@ pub struct Config {
     pub host: IpAddr,
     pub port: u16,
     pub data_dir: PathBuf,
+    pub external_url: String,
 }
 
 pub fn load() -> Result<Config, anyhow::Error> {
