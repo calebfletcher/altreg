@@ -2,3 +2,4 @@ host = "0.0.0.0"
 port = 1491
 data_dir = "/var/lib/altreg"
 external_url = "http://localhost:1491"
+offline = true

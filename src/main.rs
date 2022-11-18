@@ -62,6 +62,7 @@ async fn index(Extension(config): Extension<Config>) -> Json<Value> {
 async fn crate_fallback(
     uri: Uri,
     Extension(db): Extension<sled::Db>,
+    Extension(state): Extension<Config>,
 ) -> Result<(StatusCode, String), InternalError> {
     if let Some(part) = uri.path().split('/').nth(1) {
         if part != "index" {
@@ -86,7 +87,7 @@ async fn crate_fallback(
 
         let has_expired =
             chrono::Utc::now() - entry.time_of_last_update > chrono::Duration::minutes(30);
-        if entry.is_local || !has_expired {
+        if state.offline || entry.is_local || !has_expired {
             return entry
                 .versions
                 .into_iter()
@@ -107,6 +108,10 @@ async fn crate_fallback(
                 .with_context(|| "could not remove entry from cache")?;
         }
     };
+
+    if state.offline {
+        return Ok((StatusCode::NOT_FOUND, "not found".to_owned()));
+    }
 
     info!("pulling crate metadata from upstream");
     let upstream = mirror::get_package(crate_name)
@@ -157,6 +162,10 @@ async fn crate_download(
 
         Ok((StatusCode::OK, buf.into()))
     } else {
+        if state.offline {
+            return Ok((StatusCode::NOT_FOUND, Bytes::new()));
+        }
+
         let bytes = match mirror::download_crate(&crate_name, &version).await? {
             Some(bytes) => bytes,
             None => return Ok((StatusCode::NOT_FOUND, Bytes::new())),
