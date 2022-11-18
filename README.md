@@ -12,22 +12,22 @@ _Name is a working title and is subject to change._
 ### 0.2.0
 - [x] Hot caching of upstream .crate files
 - [x] Hot caching of upstream index files
-- [ ] Tool to provide full mirrors of upstream for offline caches
+- [x] Uploading of crates
 ### 0.3.0
-- [ ] Index base inheritance
-  - [ ] Upstreams other than crates.io
-- [ ] Uploading of crates
-- [ ] Publish this crate to crates.io
-### 0.4.0
 - [ ] Web UI
   - [ ] View indexes
   - [ ] Search crates
+### 0.4.0
+- [ ] Tool to provide full mirrors of upstream for offline caches
+- [ ] Index base inheritance
+  - [ ] Upstreams other than crates.io
 ### 0.5.0
 - [ ] Authentication
 - [ ] Authorisation
 ### 1.0.0
 - [ ] Stabilisation of API
 - [ ] Production hardening
+- [ ] Publish this crate to crates.io
 
 ## Installation
 
