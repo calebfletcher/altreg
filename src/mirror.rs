@@ -15,7 +15,7 @@ pub async fn get_package(name: &str) -> Result<Option<String>, anyhow::Error> {
     let response = reqwest::get(url)
         .await?
         .error_for_status()
-        .map(|response| Some(response))
+        .map(Some)
         .or_else(|e| match e.status() {
             Some(StatusCode::NOT_FOUND) => Ok(None),
             Some(_) => Err(e.into()),
@@ -36,7 +36,7 @@ pub async fn download_crate(name: &str, version: &str) -> Result<Option<Bytes>, 
     let response = reqwest::get(url)
         .await?
         .error_for_status()
-        .map(|response| Some(response))
+        .map(Some)
         .or_else(|e| match e.status() {
             Some(StatusCode::NOT_FOUND) => Ok(None),
             Some(_) => Err(e.into()),
