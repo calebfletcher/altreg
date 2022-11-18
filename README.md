@@ -51,7 +51,7 @@ Add registry to Cargo's config by putting the following into either your global 
 [registries.private]
 index = "http://localhost:1491"
 ```
-This assumes you want the registry to be named `private` and is running on your local machine on port 3000. Update these as required.
+This assumes you want the registry to be named `private` and is running on your local machine on port 1491. Update these as required.
 
 If you would like to use this registry as the default, add this to Cargo's config (updating the registry's name where appropriate):
 ```
