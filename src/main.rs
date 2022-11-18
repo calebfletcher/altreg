@@ -219,6 +219,13 @@ async fn add_crate(
         let mut entry: Entry = bincode::deserialize(&entry)
             .with_context(|| "could not deserialise metadata in cache entry")?;
 
+        // Make sure we don't publish new versions of existing upstream crates
+        if !entry.is_local {
+            return create_error(
+                "attempted to upload crate with the same name as a cached upstream crate",
+            );
+        }
+
         // Check that it is valid to upload this version
         let new_version = Version::parse(&metadata.vers)?;
         for version in &entry.versions {
