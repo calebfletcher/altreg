@@ -16,8 +16,9 @@ serde = { version = "1.0.144", features = ["derive"] }
 serde_json = "1.0.85"
 sha2 = "0.10.6"
 sled = "0.34.7"
+tera = "1.17.1"
 tokio = { version = "1.20.1", features = ["full"] }
 toml = "0.5.9"
-tower-http = { version = "0.3.4", features = ["trace"] }
+tower-http = { version = "0.3.4", features = ["trace", "fs"] }
 tracing = "0.1.36"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }

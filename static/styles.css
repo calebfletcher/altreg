@@ -1,0 +1,12 @@
+body {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 12pt;
+    padding: 1em;
+}
+
+a,
+a:visited,
+a:hover,
+a:active {
+    color: inherit;
+}

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="..">Crates List</a><br />
+<h1>{{crate_name}}</h1>
+{% for version in meta.versions %}
+<h2>{{version.vers}}</h2>
+{% endfor %}
+{% endblock content %}

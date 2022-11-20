@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="..">Root</a><br />
+<h1>Crates</h1>
+{% for crate in crates %}
+<a href="/crates/{{crate}}">{{crate}}</a><br />
+{% endfor %}
+{% endblock content %}

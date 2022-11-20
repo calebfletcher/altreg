@@ -9,8 +9,7 @@ use axum::{
     body::Bytes,
     extract::Path,
     http::StatusCode,
-    http::Uri,
-    response::IntoResponse,
+    response::{Html, IntoResponse, Redirect},
     routing::{get, put},
     Extension, Json, Router,
 };
@@ -19,6 +18,7 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use tera::Tera;
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
@@ -282,6 +282,46 @@ async fn add_crate(
     Ok((StatusCode::OK, Json(json!({}))))
 }
 
+async fn crate_list(
+    Extension(db): Extension<sled::Db>,
+    Extension(tera): Extension<Tera>,
+) -> Result<Html<String>, InternalError> {
+    let crates: Vec<String> = db
+        .iter()
+        .filter_map(|elem| elem.ok())
+        .map(|(crate_name, _)| String::from_utf8_lossy(&crate_name).to_string())
+        .collect();
+
+    let mut context = tera::Context::new();
+    context.insert("crates", &crates);
+    let body = tera.render("crates.html", &context)?;
+    Ok(Html(body))
+}
+
+async fn root() -> Redirect {
+    Redirect::permanent("/crates")
+}
+
+async fn crate_view(
+    Path(crate_name): Path<String>,
+    Extension(db): Extension<sled::Db>,
+    Extension(tera): Extension<Tera>,
+) -> Result<Html<String>, InternalError> {
+    let crate_meta = match db.get(&crate_name)? {
+        Some(entry) => bincode::deserialize::<Entry>(&entry)?,
+        None => {
+            let body = tera.render("crate_not_found.html", &tera::Context::new())?;
+            return Ok(Html(body));
+        }
+    };
+
+    let mut context = tera::Context::new();
+    context.insert("crate_name", &crate_name);
+    context.insert("meta", &crate_meta);
+    let body = tera.render("crate.html", &context)?;
+    Ok(Html(body))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Initialise logging system
@@ -306,18 +346,34 @@ async fn main() -> Result<(), anyhow::Error> {
     let db = sled::open(config.data_dir.join("db"))
         .with_context(|| format!("unable to open database in {}", config.data_dir.display()))?;
 
+    let tera =
+        Tera::new("templates/**.html").with_context(|| "unable to load templates".to_owned())?;
     let listen_addr = SocketAddr::new(config.host, config.port);
 
     let app = Router::new()
+        .route("/", get(root))
         .route("/index/config.json", get(index_config))
         .route("/index/1/:crate_name", get(crate_metadata))
         .route("/index/2/:crate_name", get(crate_metadata))
         .route("/index/:first/:second/:crate_name", get(crate_metadata))
+        .route("/crates", get(crate_list))
+        .route("/crates/:crate_name", get(crate_view))
         .route("/crates/:crate_name/:version/download", get(crate_download))
         .route("/api/v1/crates/new", put(add_crate))
-        .fallback(get(crate_fallback))
+        .nest(
+            "/static",
+            axum::routing::get_service(ServeDir::new("static")).handle_error(
+                |error: std::io::Error| async move {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Unhandled internal error: {}", error),
+                    )
+                },
+            ),
+        )
         .layer(Extension(config))
         .layer(Extension(db))
+        .layer(Extension(tera))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),
