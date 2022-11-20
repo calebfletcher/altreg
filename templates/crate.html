@@ -1,41 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
 <section id="crate-display">
-    <section id="crate-overview">
-        <h2>{{crate_name}} <span class="crate-version">{{version}}</span></h2>
-        <p>
-            {% if time_since_upload %}
-            Uploaded {{time_since_upload}}
-            {% endif %}
-            <br />
-            <br />
-            {% if meta.upload_meta %}
-            {{ meta.upload_meta.description }}
-            {% else %}
-            Upstream crate, no description available.
-            {% endif %}
-            <br />
-            <br />
-            Dependencies:
-        <ul>
-            {% for dep in meta.pkg.deps %}
-            <li>
-                {% if not dep.registry %}
-                <a href="/crates/{{dep.name}}">{{dep.name}}</a>
-                {% elif dep.registry == "https://github.com/rust-lang/crates.io-index" %}
-                <a href="https://crates.io/crates/{{dep.name}}">{{dep.name}}</a>
+    <section id="crate-details">
+        <section id="crate-overview">
+            <h2>{{crate_name}} <span class="crate-version">{{version}}</span></h2>
+            <p>
+                {% if time_since_upload %}
+                Uploaded {{time_since_upload}}
+                {% endif %}
+                <br />
+                <br />
+                {% if meta.upload_meta %}
+                {{ meta.upload_meta.description }}
                 {% else %}
-                {{dep.name}}
+                Upstream crate, no description available.
                 {% endif %}
-                @
-                {{dep.req}}
-                {% if dep.features %}
-                <i>(features: {% for feat in dep.features %}{{feat}}{% endfor %})</i>
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-        </p>
+                <br />
+                <br />
+                Dependencies:
+            </p>
+            <ul>
+                {% for dep in meta.pkg.deps %}
+                <li>
+                    {% if not dep.registry %}
+                    <a href="/crates/{{dep.name}}">{{dep.name}}</a>
+                    {% elif dep.registry == "https://github.com/rust-lang/crates.io-index" %}
+                    <a href="https://crates.io/crates/{{dep.name}}">{{dep.name}}</a>
+                    {% else %}
+                    {{dep.name}}
+                    {% endif %}
+                    @
+                    {{dep.req}}
+                    {% if dep.features %}
+                    <i>(features: {% for feat in dep.features %}{{feat}}{% endfor %})</i>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        <section id="crate-readme">
+            <h2>crate readme</h2>
+        </section>
     </section>
     <section id="version-list">
         <h3>Available Versions</h3>

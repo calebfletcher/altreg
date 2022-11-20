@@ -53,14 +53,35 @@ a:active {
     align-items: flex-start;
 }
 
-#crate-overview {
-    background-color: white;
+#crate-details {
     flex-grow: 1;
+
+    display: flex;
+    flex-flow: column nowrap;
+}
+
+#crate-details section {
+    background-color: white;
     padding: 1em;
+}
+
+#crate-overview {
+    margin-bottom: 1em;
 }
 
 #crate-overview h2 {
     margin-top: 0;
+}
+
+#crate-overview ul {
+    margin: 0;
+}
+
+#crate-readme {
+    /*
+    flex-grow: 1;
+    padding: 1em;
+    */
 }
 
 .crate-version {
