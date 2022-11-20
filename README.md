@@ -6,6 +6,12 @@ Uses the nightly `-Z sparse-registry` feature to allow the index to be served ov
 
 _Name is a working title and is subject to change._
 
+## Features
+- Host local crates
+- Cache crates.io index files and crate files
+- Web UI that displays crates
+- Render local crates' readmes
+
 ## Roadmap
 ### 0.1.0
 - [x] crates.io passthrough for all requests
