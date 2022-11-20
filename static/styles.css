@@ -27,7 +27,6 @@ a:active {
     box-sizing: border-box;
     width: 100%;
     padding: 1em;
-    /*font-size: 12pt;*/
 }
 
 #crate-list {
@@ -38,7 +37,7 @@ a:active {
 .crate-box {
     background-color: white;
     font-size: 1.4em;
-    border-radius: 4px;
+    border-radius: 6px;
     margin-bottom: 0.6em;
     padding: 0.4em;
 }
@@ -60,9 +59,10 @@ a:active {
     flex-flow: column nowrap;
 }
 
-#crate-details section {
+.crate-section {
     background-color: white;
     padding: 1em;
+    border-radius: 6px;
 }
 
 #crate-overview {
@@ -78,10 +78,7 @@ a:active {
 }
 
 #crate-readme {
-    /*
-    flex-grow: 1;
-    padding: 1em;
-    */
+    padding-left: 2.4em;
 }
 
 .crate-version {
@@ -90,8 +87,6 @@ a:active {
 
 #version-list {
     margin-left: 1em;
-    padding: 1em;
-    background-color: white;
     flex-grow: 0;
 }
 

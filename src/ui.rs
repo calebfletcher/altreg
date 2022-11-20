@@ -79,6 +79,12 @@ async fn crate_view(
         }
     };
 
+    let readme = meta
+        .upload_meta
+        .as_ref()
+        .and_then(|meta| meta.readme.as_ref())
+        .map(|readme| comrak::markdown_to_html(readme, &comrak::ComrakOptions::default()));
+
     let time_since_upload = meta
         .upload_timestamp
         .map(|ts| HumanTime::from(ts).to_string());
@@ -89,6 +95,7 @@ async fn crate_view(
     context.insert("version", &version);
     context.insert("meta", &meta);
     context.insert("is_local", &is_local);
+    context.insert("rendered_readme", &readme);
     context.insert("versions", &versions);
     let body = tera.render("crate.html", &context)?;
     Ok(Html(body))
