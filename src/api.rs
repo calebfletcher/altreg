@@ -5,8 +5,14 @@ use semver::Version;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::{fs::File, io::AsyncWriteExt};
+use tracing::debug;
 
-use crate::{config::Config, crate_path, package, Entry, InternalError};
+use crate::{
+    config::Config,
+    crate_path,
+    package::{self, UploadedPackage},
+    Entry, InternalError,
+};
 
 pub fn router() -> Router {
     Router::new().route("/v1/crates/new", put(add_crate))
@@ -17,6 +23,7 @@ async fn add_crate(
     Extension(db): Extension<sled::Db>,
     Extension(state): Extension<Config>,
 ) -> Result<(StatusCode, Json<Value>), InternalError> {
+    debug!("attempting to upload crate");
     if body.len() < 4 {
         return create_error("body too short");
     }
@@ -59,7 +66,7 @@ async fn add_crate(
         // Check that it is valid to upload this version
         let new_version = Version::parse(&metadata.vers)?;
         for version in &entry.versions {
-            let existing_version = Version::parse(&version.vers)?;
+            let existing_version = Version::parse(&version.pkg.vers)?;
             if new_version == existing_version {
                 return create_error("attempted to upload existing version");
             }
@@ -69,7 +76,11 @@ async fn add_crate(
         }
 
         // Add this version
-        entry.versions.push(metadata.into_package(cksum));
+        entry.versions.push(UploadedPackage {
+            pkg: metadata.to_package(cksum),
+            upload_meta: Some(metadata),
+            upload_timestamp: Some(chrono::Utc::now()),
+        });
         entry.time_of_last_update = chrono::Utc::now();
         // TODO: transaction aware db update
         db.remove(&crate_name)
@@ -82,7 +93,11 @@ async fn add_crate(
     } else {
         // If it doesn't exist, create a new entry
         let entry = Entry {
-            versions: vec![metadata.into_package(cksum)],
+            versions: vec![UploadedPackage {
+                pkg: metadata.to_package(cksum),
+                upload_meta: Some(metadata),
+                upload_timestamp: Some(chrono::Utc::now()),
+            }],
             time_of_last_update: chrono::Utc::now(),
             is_local: true,
         };

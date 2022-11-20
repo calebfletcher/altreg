@@ -4,6 +4,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use chrono_humanize::HumanTime;
 use tera::Tera;
 
 use crate::{Entry, InternalError};
@@ -12,7 +13,8 @@ pub fn router() -> Router {
     Router::new()
         .route("/", get(root))
         .route("/crates", get(crate_list))
-        .route("/crates/:crate_name", get(crate_view))
+        .route("/crates/:crate_name", get(crate_root))
+        .route("/crates/:crate_name/:version", get(crate_view))
 }
 
 async fn crate_list(
@@ -35,8 +37,12 @@ async fn root() -> Redirect {
     Redirect::permanent("/crates")
 }
 
+async fn crate_root(Path(crate_name): Path<String>) -> Redirect {
+    Redirect::temporary(&format!("/crates/{}/latest", crate_name))
+}
+
 async fn crate_view(
-    Path(crate_name): Path<String>,
+    Path((crate_name, mut version)): Path<(String, String)>,
     Extension(db): Extension<sled::Db>,
     Extension(tera): Extension<Tera>,
 ) -> Result<Html<String>, InternalError> {
@@ -48,9 +54,42 @@ async fn crate_view(
         }
     };
 
+    let is_local = crate_meta.is_local;
+    let versions = crate_meta
+        .versions
+        .iter()
+        .map(|package| package.pkg.vers.clone())
+        .collect::<Vec<_>>();
+
+    let meta = if version == "latest" {
+        let meta = crate_meta.versions.last().unwrap();
+        version = meta.pkg.vers.clone();
+        meta
+    } else {
+        match crate_meta
+            .versions
+            .iter()
+            .find(|package| package.pkg.vers == version)
+        {
+            Some(package) => package,
+            None => {
+                let body = tera.render("crate_not_found.html", &tera::Context::new())?;
+                return Ok(Html(body));
+            }
+        }
+    };
+
+    let time_since_upload = meta
+        .upload_timestamp
+        .map(|ts| HumanTime::from(ts).to_string());
+
     let mut context = tera::Context::new();
     context.insert("crate_name", &crate_name);
-    context.insert("meta", &crate_meta);
+    context.insert("time_since_upload", &time_since_upload);
+    context.insert("version", &version);
+    context.insert("meta", &meta);
+    context.insert("is_local", &is_local);
+    context.insert("versions", &versions);
     let body = tera.render("crate.html", &context)?;
     Ok(Html(body))
 }

@@ -10,6 +10,7 @@ use std::{fs, net::SocketAddr};
 
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Extension, Router};
+use package::UploadedPackage;
 use serde::{Deserialize, Serialize};
 use tera::Tera;
 use tower_http::{
@@ -18,11 +19,9 @@ use tower_http::{
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::package::Package;
-
 #[derive(Serialize, Deserialize)]
 struct Entry {
-    versions: Vec<Package>,
+    versions: Vec<UploadedPackage>,
     time_of_last_update: chrono::DateTime<chrono::Utc>,
     is_local: bool,
 }

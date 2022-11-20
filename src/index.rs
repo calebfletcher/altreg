@@ -4,14 +4,19 @@ use reqwest::StatusCode;
 use serde_json::{json, Value};
 use tracing::info;
 
-use crate::{config::Config, mirror, Entry, InternalError, package::Package};
+use crate::{
+    config::Config,
+    mirror,
+    package::{Package, UploadedPackage},
+    Entry, InternalError,
+};
 
 pub fn router() -> Router {
     Router::new()
-        .route("/index/config.json", get(index_config))
-        .route("/index/1/:crate_name", get(crate_metadata))
-        .route("/index/2/:crate_name", get(crate_metadata))
-        .route("/index/:first/:second/:crate_name", get(crate_metadata))
+        .route("/config.json", get(index_config))
+        .route("/1/:crate_name", get(crate_metadata))
+        .route("/2/:crate_name", get(crate_metadata))
+        .route("/:first/:second/:crate_name", get(crate_metadata))
 }
 
 async fn index_config(Extension(config): Extension<Config>) -> Json<Value> {
@@ -40,7 +45,7 @@ async fn crate_metadata(
             return entry
                 .versions
                 .into_iter()
-                .map(|version| serde_json::to_string(&version))
+                .map(|version| serde_json::to_string(&version.pkg))
                 .try_fold(String::new(), |mut acc, item| {
                     acc.push_str(
                         &item.with_context(|| "could not convert version metadata to json")?,
@@ -73,9 +78,18 @@ async fn crate_metadata(
     };
 
     // Upstream JSON format to binary representation
-    let versions: Vec<Package> = upstream
+    let versions: Vec<UploadedPackage> = upstream
         .lines()
+        // Deserialise each version from upstream
         .map(serde_json::from_str)
+        // Add null upload timestamps
+        .map(|pkg: Result<Package, _>| {
+            pkg.map(|pkg| UploadedPackage {
+                pkg,
+                upload_meta: None,
+                upload_timestamp: None,
+            })
+        })
         .collect::<Result<_, _>>()
         .with_context(|| "could not parse upstream json metadata")?;
 

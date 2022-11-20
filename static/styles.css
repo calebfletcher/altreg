@@ -1,7 +1,7 @@
 body {
     font-family: 'Open Sans', sans-serif;
-    font-size: 12pt;
-    padding: 1em;
+    margin: 0;
+    background-color: #f0f0f0;
 }
 
 a,
@@ -9,4 +9,71 @@ a:visited,
 a:hover,
 a:active {
     color: inherit;
+}
+
+#topbar {
+    background-color: #dbdbdb;
+    width: 100%;
+    padding: 8px 16px;
+    box-sizing: border-box;
+}
+
+#mainlink {
+    font-size: 2rem;
+    text-decoration: none;
+}
+
+#content {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 1em;
+    /*font-size: 12pt;*/
+}
+
+#crate-list {
+    display: flex;
+    flex-flow: column nowrap;
+}
+
+.crate-box {
+    background-color: white;
+    font-size: 1.4em;
+    border-radius: 4px;
+    margin-bottom: 0.6em;
+    padding: 0.4em;
+}
+
+.crate-box a {
+    text-decoration: none;
+}
+
+#crate-display {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: flex-start;
+}
+
+#crate-overview {
+    background-color: white;
+    flex-grow: 1;
+    padding: 1em;
+}
+
+#crate-overview h2 {
+    margin-top: 0;
+}
+
+.crate-version {
+    color: gray;
+}
+
+#version-list {
+    margin-left: 1em;
+    padding: 1em;
+    background-color: white;
+    flex-grow: 0;
+}
+
+#version-list h3 {
+    margin-top: 0;
 }

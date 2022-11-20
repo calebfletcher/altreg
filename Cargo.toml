@@ -10,6 +10,7 @@ anyhow = "1.0.62"
 axum = { version = "0.5.15", features = ["http2"] }
 bincode = "1.3.3"
 chrono = { version = "0.4.22", features = ["serde"] }
+chrono-humanize = "0.2.2"
 reqwest = { version = "0.11.11", features = ["json"] }
 semver = "1.0.14"
 serde = { version = "1.0.144", features = ["derive"] }
