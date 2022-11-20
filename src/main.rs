@@ -23,7 +23,10 @@ use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
 };
-use tower_http::trace::{DefaultMakeSpan, TraceLayer};
+use tower_http::{
+    services::ServeDir,
+    trace::{DefaultMakeSpan, TraceLayer},
+};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -55,39 +58,29 @@ impl<T: Into<anyhow::Error>> From<T> for InternalError {
     }
 }
 
-async fn index(Extension(config): Extension<Config>) -> Json<Value> {
+async fn index_config(Extension(config): Extension<Config>) -> Json<Value> {
     Json(json!({ "dl": config.external_url.clone() + "/crates", "api": config.external_url }))
 }
 
-async fn crate_fallback(
-    uri: Uri,
+async fn crate_metadata(
+    Path(parts): Path<Vec<String>>,
     Extension(db): Extension<sled::Db>,
-    Extension(state): Extension<Config>,
+    Extension(config): Extension<Config>,
 ) -> Result<(StatusCode, String), InternalError> {
-    if let Some(part) = uri.path().split('/').nth(1) {
-        if part != "index" {
-            return Ok((StatusCode::NOT_FOUND, "not found".to_owned()));
-        }
-    } else {
-        return Ok((StatusCode::NOT_FOUND, "not found".to_owned()));
-    }
-
-    let crate_name = match uri.path().split('/').filter(|part| !part.is_empty()).last() {
-        Some(name) => name,
-        None => Err(anyhow!("unable to find crate"))?,
-    };
+    let crate_name = parts.last().expect("invalid route to crate_metadata");
+    info!(crate = crate_name, "pulling crate metadata");
 
     let cache_entry = db
         .get(crate_name)
         .with_context(|| "could not access cache entry")?;
     if let Some(entry) = cache_entry {
-        info!("found crate in cache");
         let entry: Entry = bincode::deserialize(&entry)
             .with_context(|| "could not deserialise metadata in cache entry")?;
 
         let has_expired =
             chrono::Utc::now() - entry.time_of_last_update > chrono::Duration::minutes(30);
-        if state.offline || entry.is_local || !has_expired {
+        if config.offline || entry.is_local || !has_expired {
+            info!(crate = crate_name, "returning metadata from cache");
             return entry
                 .versions
                 .into_iter()
@@ -102,18 +95,18 @@ async fn crate_fallback(
                 .map(|metadata| (StatusCode::OK, metadata));
         } else {
             // Expired crate
-            info!("crate in cache has expired");
+            info!(crate = crate_name, "crate in cache has expired");
 
             db.remove(crate_name)
                 .with_context(|| "could not remove entry from cache")?;
         }
     };
 
-    if state.offline {
+    if config.offline {
         return Ok((StatusCode::NOT_FOUND, "not found".to_owned()));
     }
 
-    info!("pulling crate metadata from upstream");
+    info!(crate = crate_name, "pulling crate metadata from upstream");
     let upstream = mirror::get_package(crate_name)
         .await
         .with_context(|| "could not get package from upstream")?;
@@ -316,7 +309,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let listen_addr = SocketAddr::new(config.host, config.port);
 
     let app = Router::new()
-        .route("/index/config.json", get(index))
+        .route("/index/config.json", get(index_config))
+        .route("/index/1/:crate_name", get(crate_metadata))
+        .route("/index/2/:crate_name", get(crate_metadata))
+        .route("/index/:first/:second/:crate_name", get(crate_metadata))
         .route("/crates/:crate_name/:version/download", get(crate_download))
         .route("/api/v1/crates/new", put(add_crate))
         .fallback(get(crate_fallback))
