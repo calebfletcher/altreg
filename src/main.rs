@@ -1,18 +1,24 @@
 mod api;
 mod config;
 mod dl;
+mod docs;
 mod index;
 mod mirror;
 mod package;
 mod ui;
 
-use std::{fs, net::SocketAddr};
+use std::{
+    fs,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Extension, Router};
 use package::UploadedPackage;
 use serde::{Deserialize, Serialize};
 use tera::Tera;
+use tokio::sync::mpsc;
 use tower_http::{
     services::ServeDir,
     trace::{DefaultMakeSpan, TraceLayer},
@@ -69,6 +75,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let db = sled::open(config.data_dir.join("db"))
         .with_context(|| format!("unable to open database in {}", config.data_dir.display()))?;
 
+    // Docs generator thread
+    let (docs_queue_tx, docs_queue_rx) = mpsc::unbounded_channel();
+    docs::start_background_thread(config.data_dir.clone(), docs_queue_rx);
+
     let tera =
         Tera::new("templates/**.html").with_context(|| "unable to load templates".to_owned())?;
     let listen_addr = SocketAddr::new(config.host, config.port);
@@ -92,6 +102,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(Extension(config))
         .layer(Extension(db))
         .layer(Extension(tera))
+        .layer(Extension(docs_queue_tx))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),

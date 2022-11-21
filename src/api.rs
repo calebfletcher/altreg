@@ -4,7 +4,7 @@ use reqwest::StatusCode;
 use semver::Version;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tokio::{fs::File, io::AsyncWriteExt};
+use tokio::{fs::File, io::AsyncWriteExt, sync::mpsc::UnboundedSender};
 use tracing::debug;
 
 use crate::{
@@ -22,6 +22,7 @@ async fn add_crate(
     body: Bytes,
     Extension(db): Extension<sled::Db>,
     Extension(state): Extension<Config>,
+    Extension(docs_queue_tx): Extension<UnboundedSender<(String, String)>>,
 ) -> Result<(StatusCode, Json<Value>), InternalError> {
     debug!("attempting to upload crate");
     if body.len() < 4 {
@@ -118,6 +119,9 @@ async fn add_crate(
     }
     let mut file = File::create(cache_path).await?;
     file.write_all(&data).await?;
+
+    // Notify the background thread to build the docs for this crate
+    docs_queue_tx.send((crate_name, crate_version))?;
 
     Ok((StatusCode::OK, Json(json!({}))))
 }
