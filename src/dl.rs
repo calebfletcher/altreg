@@ -16,10 +16,7 @@ async fn crate_download(
     Path((crate_name, version)): Path<(String, String)>,
     Extension(state): Extension<Config>,
 ) -> Result<(StatusCode, Bytes), InternalError> {
-    let cache_path = state
-        .data_dir
-        .join("crates")
-        .join(crate_path(&crate_name, &version));
+    let cache_path = crate_path(state.data_dir, &crate_name, &version);
     if cache_path.exists() {
         tracing::info!("using cached {crate_name}@{version}");
         let mut file = File::open(cache_path).await?;

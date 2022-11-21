@@ -109,10 +109,7 @@ async fn add_crate(
     }
 
     // Store crate file
-    let cache_path = state
-        .data_dir
-        .join("crates")
-        .join(crate_path(&crate_name, &crate_version));
+    let cache_path = crate_path(state.data_dir, &crate_name, &crate_version);
     let parent = cache_path
         .parent()
         .ok_or_else(|| anyhow!("invalid cache path"))?;

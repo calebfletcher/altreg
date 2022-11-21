@@ -104,6 +104,10 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn crate_path(name: &str, version: &str) -> String {
-    format!("{}/{}/download", name, version)
+fn crate_path(data_dir: impl AsRef<Path>, name: &str, version: &str) -> PathBuf {
+    data_dir
+        .as_ref()
+        .join("crates")
+        .join(name)
+        .join(version.to_owned() + ".crate")
 }
