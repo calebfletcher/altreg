@@ -84,7 +84,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let listen_addr = SocketAddr::new(config.host, config.port);
 
     let app = Router::new()
-        .merge(ui::router())
+        .merge(ui::router(&config.data_dir))
         .merge(dl::router())
         .nest("/index", index::router())
         .nest("/api", api::router())

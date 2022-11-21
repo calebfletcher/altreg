@@ -1,3 +1,5 @@
+use std::path;
+
 use axum::{
     extract::Path,
     response::{Html, Redirect},
@@ -5,16 +7,29 @@ use axum::{
     Extension, Router,
 };
 use chrono_humanize::HumanTime;
+use reqwest::StatusCode;
 use tera::Tera;
+use tower_http::services::ServeDir;
 
 use crate::{Entry, InternalError};
 
-pub fn router() -> Router {
+pub fn router(data_dir: &path::Path) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/crates", get(crate_list))
         .route("/crates/:crate_name", get(crate_root))
         .route("/crates/:crate_name/:version", get(crate_view))
+        .nest(
+            "/docs",
+            axum::routing::get_service(ServeDir::new(data_dir.join("docs"))).handle_error(
+                |error: std::io::Error| async move {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Unhandled internal error: {}", error),
+                    )
+                },
+            ),
+        )
 }
 
 async fn crate_list(

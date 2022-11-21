@@ -43,6 +43,10 @@
         </div>
     </div>
     <div id="version-list" class="crate-section">
+        <a href="/docs/{{crate_name}}/{{version}}/lazy_static/">
+            <h3>Documentation</h3>
+        </a>
+        <br />
         <h3>Available Versions</h3>
         {% for vers in versions | reverse %}
         <a href="/crates/{{crate_name}}/{{vers}}">{{vers}}{% if loop.first %} (latest){% endif %}</a><br />
