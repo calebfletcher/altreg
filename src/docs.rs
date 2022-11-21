@@ -1,6 +1,6 @@
 use std::{fs, io, path::Path, thread};
 
-use rustwide::{cmd::SandboxBuilder, Crate, Toolchain, WorkspaceBuilder};
+use rustwide::{cmd::SandboxBuilder, AlternativeRegistry, Crate, Toolchain, WorkspaceBuilder};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::info;
 
@@ -14,12 +14,13 @@ pub fn start_background_thread(
         // Create a new workspace in .workspaces/docs-builder
         let workspace =
             WorkspaceBuilder::new(Path::new(".workspaces/docs-builder"), "altreg-docs-builder")
+                .sparse_registries(true)
                 .init()
                 .unwrap();
         workspace.purge_all_build_dirs().unwrap();
 
         // Run the builds on stable
-        let toolchain = Toolchain::dist("stable");
+        let toolchain = Toolchain::dist("nightly");
         toolchain.install(&workspace).unwrap();
 
         info!("docs builder ready");
@@ -37,8 +38,10 @@ pub fn start_background_thread(
             let mut build_dir = workspace.build_dir(&format!("{}-{}", name, version));
             build_dir.purge().unwrap();
 
-            // Fetch lazy_static from crates.io
-            let krate = Crate::crates_io("lazy_static", "1.0.0");
+            // Fetch crate from registry
+            let mut registry = AlternativeRegistry::new("sparse+http://localhost:1491/index/");
+            registry.sparse();
+            let krate = Crate::registry(registry, &name, &version);
             krate.fetch(&workspace).unwrap();
 
             info!("building crate docs");
@@ -48,7 +51,7 @@ pub fn start_background_thread(
                     // Build docs
                     build
                         .cargo()
-                        .args(&["doc", "--offline", "--no-deps"])
+                        .args(&["doc", "--offline", "--no-deps", "-Zsparse-registry"])
                         .run()?;
 
                     // Copy docs to data directory
