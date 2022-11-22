@@ -82,10 +82,12 @@ a:active {
     display: flex;
     flex-flow: row nowrap;
     align-items: flex-start;
+    justify-content: center;
 }
 
 #crate-details {
     flex-grow: 1;
+    max-width: 60em;
 
     display: flex;
     flex-flow: column nowrap;
@@ -110,7 +112,7 @@ a:active {
 }
 
 #crate-readme {
-    padding-left: 2.4em;
+    padding: 0.4em 2.4em;
 }
 
 .crate-version {
