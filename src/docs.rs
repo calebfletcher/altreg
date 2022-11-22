@@ -51,7 +51,14 @@ pub fn start_background_thread(
                     // Build docs
                     build
                         .cargo()
-                        .args(&["doc", "--offline", "--no-deps", "-Zsparse-registry"])
+                        .args(&[
+                            "doc",
+                            "--offline",
+                            "--no-deps",
+                            "-Zsparse-registry",
+                            "-Zrustdoc-map",
+                            //r#"--config=doc.extern-map.registries.this_registry="http://localhost:1479/docs/""#,
+                        ])
                         .run()?;
 
                     // Copy docs to data directory

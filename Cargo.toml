@@ -25,3 +25,6 @@ toml = "0.5.9"
 tower-http = { version = "0.3.4", features = ["trace", "fs"] }
 tracing = "0.1.36"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+
+[patch.crates-io]
+rustwide = { git = "https://github.com/calebfletcher/rustwide" }
