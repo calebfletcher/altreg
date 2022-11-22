@@ -3,7 +3,7 @@
 <div id="crate-display">
     <div id="crate-details">
         <div id="crate-overview" class="crate-section">
-            <h2>{{crate_name}} <span class="crate-version">{{version}}</span></h2>
+            <h1>{{crate_name}} <span class="crate-version">{{version}}</span></h1>
             <p>
                 {% if time_since_upload %}
                 Uploaded {{time_since_upload}}
@@ -47,7 +47,7 @@
             <h3>Documentation</h3>
         </a>
         <br />
-        <h3>Available Versions</h3>
+        <h3>Versions</h3>
         {% for vers in versions | reverse %}
         <a href="/crates/{{crate_name}}/{{vers}}">{{vers}}{% if loop.first %} (latest){% endif %}</a><br />
         {% endfor %}
