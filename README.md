@@ -23,7 +23,7 @@ _Name is a working title and is subject to change._
 - [x] Web UI
   - [x] Render crate readmes
   - [x] Build and display crate docs
-  - [ ] Search crates
+  - [x] Search crates
 ### 0.4.0
 - [ ] Authentication
 - [ ] Authorisation

@@ -16,7 +16,7 @@
     <div id="topbar">
         <a id="mainlink" href="/crates">altreg</a>
         <form id="search-form" action="/crates" method="get">
-            <input type="search" name="q" />
+            <input type="search" name="q" value="{{search_term | default(value="")}}" />
             <button>
                 <img src="/static/icons/search.svg" alt="Search">
             </button>

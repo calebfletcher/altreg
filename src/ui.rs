@@ -1,7 +1,7 @@
-use std::path;
+use std::{collections::HashMap, path};
 
 use axum::{
-    extract::Path,
+    extract::{Path, Query},
     response::{Html, Redirect},
     routing::get,
     Extension, Router,
@@ -33,17 +33,22 @@ pub fn router(data_dir: &path::Path) -> Router {
 }
 
 async fn crate_list(
+    Query(params): Query<HashMap<String, String>>,
     Extension(db): Extension<sled::Db>,
     Extension(tera): Extension<Tera>,
 ) -> Result<Html<String>, InternalError> {
+    let filter = params.get("q");
+
     let crates: Vec<String> = db
         .iter()
         .filter_map(|elem| elem.ok())
         .map(|(crate_name, _)| String::from_utf8_lossy(&crate_name).to_string())
+        .filter(|crate_name| filter.map_or(true, |filter| crate_name.contains(filter)))
         .collect();
 
     let mut context = tera::Context::new();
     context.insert("crates", &crates);
+    context.insert("search_term", &filter);
     let body = tera.render("crates.html", &context)?;
     Ok(Html(body))
 }
