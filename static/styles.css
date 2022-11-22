@@ -125,3 +125,9 @@ a:active {
 #version-list h3 {
     margin-top: 0;
 }
+
+pre {
+    background-color: #f0f0f0;
+    padding: 0.8em;
+    border-radius: 0.4em;
+}
