@@ -2,7 +2,7 @@ use std::{fs, io, path::Path, thread};
 
 use rustwide::{cmd::SandboxBuilder, AlternativeRegistry, Crate, Toolchain, WorkspaceBuilder};
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::info;
+use tracing::{debug, info};
 
 pub fn start_background_thread(
     data_dir: impl AsRef<Path>,
@@ -10,7 +10,7 @@ pub fn start_background_thread(
 ) {
     let data_dir = data_dir.as_ref().to_owned();
     thread::spawn(move || {
-        info!("preparing docs build environment");
+        debug!("preparing docs build environment");
         // Create a new workspace in .workspaces/docs-builder
         let workspace =
             WorkspaceBuilder::new(Path::new(".workspaces/docs-builder"), "altreg-docs-builder")
@@ -44,7 +44,7 @@ pub fn start_background_thread(
             let krate = Crate::registry(registry, &name, &version);
             krate.fetch(&workspace).unwrap();
 
-            info!("building crate docs");
+            debug!("building crate docs");
             build_dir
                 .build(&toolchain, &krate, sandbox)
                 .run(|build| {
@@ -73,7 +73,7 @@ pub fn start_background_thread(
             // Clean up
             build_dir.purge().unwrap();
             krate.purge_from_cache(&workspace).unwrap();
-            info!("built crate");
+            debug!("built crate");
         }
     });
 }
