@@ -20,16 +20,17 @@ _Name is a working title and is subject to change._
 - [x] Hot caching of upstream index files
 - [x] Uploading of crates
 ### 0.3.0
-- [ ] Web UI
-  - [ ] View indexes
+- [x] Web UI
+  - [x] Render crate readmes
+  - [x] Build and display crate docs
   - [ ] Search crates
 ### 0.4.0
+- [ ] Authentication
+- [ ] Authorisation
+### 0.5.0
 - [ ] Tool to provide full mirrors of upstream for offline caches
 - [ ] Index base inheritance
   - [ ] Upstreams other than crates.io
-### 0.5.0
-- [ ] Authentication
-- [ ] Authorisation
 ### 1.0.0
 - [ ] Stabilisation of API
 - [ ] Production hardening
