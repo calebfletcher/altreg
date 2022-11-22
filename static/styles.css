@@ -64,6 +64,8 @@ a:active {
 #crate-list {
     display: flex;
     flex-flow: column nowrap;
+    max-width: 60em;
+    margin: 0 auto;
 }
 
 .crate-box {
