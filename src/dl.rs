@@ -1,20 +1,25 @@
 use anyhow::anyhow;
-use axum::{body::Bytes, extract::Path, routing::get, Extension, Router};
+use axum::{
+    body::Bytes,
+    extract::{Path, State},
+    routing::get,
+    Router,
+};
 use reqwest::StatusCode;
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
 };
 
-use crate::{config::Config, crate_path, mirror, InternalError};
+use crate::{config::Config, crate_path, mirror, AppState, InternalError};
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new().route("/crates/:crate_name/:version/download", get(crate_download))
 }
 
 async fn crate_download(
     Path((crate_name, version)): Path<(String, String)>,
-    Extension(state): Extension<Config>,
+    State(state): State<Config>,
 ) -> Result<(StatusCode, Bytes), InternalError> {
     let cache_path = crate_path(state.data_dir, &crate_name, &version);
     if cache_path.exists() {

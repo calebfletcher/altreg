@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context};
-use axum::{body::Bytes, routing::put, Extension, Json, Router};
+use axum::{body::Bytes, extract::State, routing::put, Json, Router};
 use reqwest::StatusCode;
 use semver::Version;
 use serde_json::{json, Value};
@@ -11,18 +11,18 @@ use crate::{
     config::Config,
     crate_path,
     package::{self, UploadedPackage},
-    Entry, InternalError,
+    AppState, Entry, InternalError,
 };
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new().route("/v1/crates/new", put(add_crate))
 }
 
 async fn add_crate(
+    State(db): State<sled::Db>,
+    State(state): State<Config>,
+    State(docs_queue_tx): State<UnboundedSender<(String, String)>>,
     body: Bytes,
-    Extension(db): Extension<sled::Db>,
-    Extension(state): Extension<Config>,
-    Extension(docs_queue_tx): Extension<UnboundedSender<(String, String)>>,
 ) -> Result<(StatusCode, Json<Value>), InternalError> {
     debug!("attempting to upload crate");
     if body.len() < 4 {

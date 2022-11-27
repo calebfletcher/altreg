@@ -14,11 +14,12 @@ use std::{
 };
 
 use anyhow::Context;
-use axum::{http::StatusCode, response::IntoResponse, Extension, Router};
+use axum::{extract::FromRef, http::StatusCode, response::IntoResponse, Router};
+use config::Config;
 use package::UploadedPackage;
 use serde::{Deserialize, Serialize};
 use tera::Tera;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tower_http::{
     services::ServeDir,
     trace::{DefaultMakeSpan, TraceLayer},
@@ -49,6 +50,14 @@ impl<T: Into<anyhow::Error>> From<T> for InternalError {
     fn from(e: T) -> Self {
         Self(e.into())
     }
+}
+
+#[derive(Clone, FromRef)]
+pub struct AppState {
+    config: Config,
+    db: sled::Db,
+    templates: Tera,
+    docs_queue_tx: UnboundedSender<(String, String)>,
 }
 
 #[tokio::main]
@@ -88,7 +97,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .merge(dl::router())
         .nest("/index", index::router())
         .nest("/api", api::router())
-        .nest(
+        .nest_service(
             "/static",
             axum::routing::get_service(ServeDir::new("static")).handle_error(
                 |error: std::io::Error| async move {
@@ -99,10 +108,12 @@ async fn main() -> Result<(), anyhow::Error> {
                 },
             ),
         )
-        .layer(Extension(config))
-        .layer(Extension(db))
-        .layer(Extension(tera))
-        .layer(Extension(docs_queue_tx))
+        .with_state(AppState {
+            config,
+            db,
+            templates: tera,
+            docs_queue_tx,
+        })
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),

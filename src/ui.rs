@@ -1,25 +1,25 @@
 use std::{collections::HashMap, path};
 
 use axum::{
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     response::{Html, Redirect},
     routing::get,
-    Extension, Router,
+    Router,
 };
 use chrono_humanize::HumanTime;
 use reqwest::StatusCode;
 use tera::Tera;
 use tower_http::services::ServeDir;
 
-use crate::{Entry, InternalError};
+use crate::{AppState, Entry, InternalError};
 
-pub fn router(data_dir: &path::Path) -> Router {
+pub fn router(data_dir: &path::Path) -> Router<AppState> {
     Router::new()
         .route("/", get(root))
         .route("/crates", get(crate_list))
         .route("/crates/:crate_name", get(crate_root))
         .route("/crates/:crate_name/:version", get(crate_view))
-        .nest(
+        .nest_service(
             "/docs",
             axum::routing::get_service(ServeDir::new(data_dir.join("docs"))).handle_error(
                 |error: std::io::Error| async move {
@@ -34,8 +34,8 @@ pub fn router(data_dir: &path::Path) -> Router {
 
 async fn crate_list(
     Query(params): Query<HashMap<String, String>>,
-    Extension(db): Extension<sled::Db>,
-    Extension(tera): Extension<Tera>,
+    State(db): State<sled::Db>,
+    State(tera): State<Tera>,
 ) -> Result<Html<String>, InternalError> {
     let filter = params.get("q");
 
@@ -63,8 +63,8 @@ async fn crate_root(Path(crate_name): Path<String>) -> Redirect {
 
 async fn crate_view(
     Path((crate_name, mut version)): Path<(String, String)>,
-    Extension(db): Extension<sled::Db>,
-    Extension(tera): Extension<Tera>,
+    State(db): State<sled::Db>,
+    State(tera): State<Tera>,
 ) -> Result<Html<String>, InternalError> {
     let crate_meta = match db.get(&crate_name)? {
         Some(entry) => bincode::deserialize::<Entry>(&entry)?,

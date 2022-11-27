@@ -1,5 +1,9 @@
 use anyhow::Context;
-use axum::{extract::Path, routing::get, Extension, Json, Router};
+use axum::{
+    extract::{Path, State},
+    routing::get,
+    Json, Router,
+};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 use tracing::info;
@@ -8,25 +12,24 @@ use crate::{
     config::Config,
     mirror,
     package::{Package, UploadedPackage},
-    Entry, InternalError,
+    AppState, Entry, InternalError,
 };
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/config.json", get(index_config))
-        .route("/1/:crate_name", get(crate_metadata))
-        .route("/2/:crate_name", get(crate_metadata))
-        .route("/:first/:second/:crate_name", get(crate_metadata))
+        .route("/:a/:crate_name", get(crate_metadata))
+        .route("/:a/:b/:crate_name", get(crate_metadata))
 }
 
-async fn index_config(Extension(config): Extension<Config>) -> Json<Value> {
+async fn index_config(State(config): State<Config>) -> Json<Value> {
     Json(json!({ "dl": config.external_url.clone() + "/crates", "api": config.external_url }))
 }
 
 async fn crate_metadata(
     Path(parts): Path<Vec<String>>,
-    Extension(db): Extension<sled::Db>,
-    Extension(config): Extension<Config>,
+    State(db): State<sled::Db>,
+    State(config): State<Config>,
 ) -> Result<(StatusCode, String), InternalError> {
     let crate_name = parts.last().expect("invalid route to crate_metadata");
     info!(crate = crate_name, "pulling crate metadata");
