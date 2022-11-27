@@ -62,13 +62,14 @@ async fn add_crate(
 
             // Check that it is valid to upload this version
             let new_version = Version::parse(&metadata.vers)?;
+            let mut is_older_than_latest = false;
             for version in &entry.versions {
                 let existing_version = Version::parse(&version.pkg.vers)?;
                 if new_version == existing_version {
                     return create_error("attempted to upload existing version");
                 }
                 if new_version < existing_version {
-                    return create_error("attempted to upload older version");
+                    is_older_than_latest = true;
                 }
             }
 
@@ -78,6 +79,12 @@ async fn add_crate(
                 upload_meta: Some(metadata),
                 upload_timestamp: Some(chrono::Utc::now()),
             });
+            if is_older_than_latest {
+                entry.versions.sort_unstable_by_key(|version| {
+                    Version::parse(&version.pkg.vers)
+                        .expect("all existing versions have valid identifiers")
+                })
+            }
             entry.time_of_last_update = chrono::Utc::now();
             db.insert_crate(&crate_name, entry)?;
         }
