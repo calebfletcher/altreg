@@ -18,7 +18,8 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/config.json", get(index_config))
-        .route("/:a/:crate_name", get(crate_metadata))
+        .route("/1/:crate_name", get(crate_metadata))
+        .route("/2/:crate_name", get(crate_metadata))
         .route("/:a/:b/:crate_name", get(crate_metadata))
 }
 
@@ -28,19 +29,13 @@ async fn index_config(State(config): State<Config>) -> Json<Value> {
 
 async fn crate_metadata(
     Path(parts): Path<Vec<String>>,
-    State(db): State<sled::Db>,
+    State(db): State<crate::Db>,
     State(config): State<Config>,
 ) -> Result<(StatusCode, String), InternalError> {
     let crate_name = parts.last().expect("invalid route to crate_metadata");
     info!(crate = crate_name, "pulling crate metadata");
 
-    let cache_entry = db
-        .get(crate_name)
-        .with_context(|| "could not access cache entry")?;
-    if let Some(entry) = cache_entry {
-        let entry: Entry = bincode::deserialize(&entry)
-            .with_context(|| "could not deserialise metadata in cache entry")?;
-
+    if let Some(entry) = db.get_crate(crate_name)? {
         let has_expired =
             chrono::Utc::now() - entry.time_of_last_update > chrono::Duration::minutes(30);
         if config.offline || entry.is_local || !has_expired {
@@ -60,9 +55,7 @@ async fn crate_metadata(
         } else {
             // Expired crate
             info!(crate = crate_name, "crate in cache has expired");
-
-            db.remove(crate_name)
-                .with_context(|| "could not remove entry from cache")?;
+            db.remove_crate(crate_name)?;
         }
     };
 
@@ -103,11 +96,7 @@ async fn crate_metadata(
     };
 
     // Insert binary representation into database
-    db.insert(
-        crate_name,
-        bincode::serialize(&entry).with_context(|| "could not serialise cache entry")?,
-    )
-    .with_context(|| "could not insert cache entry")?;
+    db.insert_crate(crate_name, entry)?;
 
     Ok((StatusCode::OK, upstream))
 }

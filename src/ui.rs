@@ -11,7 +11,7 @@ use reqwest::StatusCode;
 use tera::Tera;
 use tower_http::services::ServeDir;
 
-use crate::{AppState, Entry, InternalError};
+use crate::{AppState, InternalError};
 
 pub fn router(data_dir: &path::Path) -> Router<AppState> {
     Router::new()
@@ -34,13 +34,13 @@ pub fn router(data_dir: &path::Path) -> Router<AppState> {
 
 async fn crate_list(
     Query(params): Query<HashMap<String, String>>,
-    State(db): State<sled::Db>,
+    State(db): State<crate::Db>,
     State(tera): State<Tera>,
 ) -> Result<Html<String>, InternalError> {
     let filter = params.get("q");
 
     let crates: Vec<String> = db
-        .iter()
+        .iter_crates()
         .filter_map(|elem| elem.ok())
         .map(|(crate_name, _)| String::from_utf8_lossy(&crate_name).to_string())
         .filter(|crate_name| filter.map_or(true, |filter| crate_name.contains(filter)))
@@ -63,15 +63,12 @@ async fn crate_root(Path(crate_name): Path<String>) -> Redirect {
 
 async fn crate_view(
     Path((crate_name, mut version)): Path<(String, String)>,
-    State(db): State<sled::Db>,
+    State(db): State<crate::Db>,
     State(tera): State<Tera>,
 ) -> Result<Html<String>, InternalError> {
-    let crate_meta = match db.get(&crate_name)? {
-        Some(entry) => bincode::deserialize::<Entry>(&entry)?,
-        None => {
-            let body = tera.render("crate_not_found.html", &tera::Context::new())?;
-            return Ok(Html(body));
-        }
+    let Some(crate_meta) = db.get_crate(&crate_name)? else {
+        let body = tera.render("crate_not_found.html", &tera::Context::new())?;
+        return Ok(Html(body));
     };
 
     let is_local = crate_meta.is_local;

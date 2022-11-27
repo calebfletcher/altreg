@@ -1,11 +1,14 @@
 mod api;
 mod config;
+mod db;
 mod dl;
 mod docs;
 mod index;
 mod mirror;
 mod package;
 mod ui;
+
+use db::Db;
 
 use std::{
     fs,
@@ -27,7 +30,7 @@ use tower_http::{
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Serialize, Deserialize)]
-struct Entry {
+pub struct Entry {
     versions: Vec<UploadedPackage>,
     time_of_last_update: chrono::DateTime<chrono::Utc>,
     is_local: bool,
@@ -55,7 +58,7 @@ impl<T: Into<anyhow::Error>> From<T> for InternalError {
 #[derive(Clone, FromRef)]
 pub struct AppState {
     config: Config,
-    db: sled::Db,
+    db: db::Db,
     templates: Tera,
     docs_queue_tx: UnboundedSender<(String, String)>,
 }
@@ -81,8 +84,7 @@ async fn main() -> Result<(), anyhow::Error> {
         fs::create_dir(&crates_dir).with_context(|| "unable to create crate cache dir")?;
     }
 
-    let db = sled::open(config.data_dir.join("db"))
-        .with_context(|| format!("unable to open database in {}", config.data_dir.display()))?;
+    let db = db::Db::open(config.data_dir.join("db"))?;
 
     // Docs generator thread
     let (docs_queue_tx, docs_queue_rx) = mpsc::unbounded_channel();

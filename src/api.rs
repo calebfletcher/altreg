@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use axum::{body::Bytes, extract::State, routing::put, Json, Router};
 use reqwest::StatusCode;
 use semver::Version;
@@ -19,7 +19,7 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn add_crate(
-    State(db): State<sled::Db>,
+    State(db): State<crate::Db>,
     State(state): State<Config>,
     State(docs_queue_tx): State<UnboundedSender<(String, String)>>,
     body: Bytes,
@@ -49,64 +49,51 @@ async fn add_crate(
     let cksum = format!("{:x}", Sha256::digest(&data));
 
     // Check if crate already exists
-    let cache_entry = db
-        .get(&metadata.name)
-        .with_context(|| "could not access cache entry")?;
-    if let Some(entry) = cache_entry {
-        // If it already exists, add a new version to the entryinfo!("found crate in cache");
-        let mut entry: Entry = bincode::deserialize(&entry)
-            .with_context(|| "could not deserialise metadata in cache entry")?;
+    match db.get_crate(&crate_name)? {
+        Some(mut entry) => {
+            // If it already exists, add a new version to the entry
 
-        // Make sure we don't publish new versions of existing upstream crates
-        if !entry.is_local {
-            return create_error(
-                "attempted to upload crate with the same name as a cached upstream crate",
-            );
-        }
-
-        // Check that it is valid to upload this version
-        let new_version = Version::parse(&metadata.vers)?;
-        for version in &entry.versions {
-            let existing_version = Version::parse(&version.pkg.vers)?;
-            if new_version == existing_version {
-                return create_error("attempted to upload existing version");
+            // Make sure we don't publish new versions of existing upstream crates
+            if !entry.is_local {
+                return create_error(
+                    "attempted to upload crate with the same name as a cached upstream crate",
+                );
             }
-            if new_version < existing_version {
-                return create_error("attempted to upload older version");
-            }
-        }
 
-        // Add this version
-        entry.versions.push(UploadedPackage {
-            pkg: metadata.to_package(cksum),
-            upload_meta: Some(metadata),
-            upload_timestamp: Some(chrono::Utc::now()),
-        });
-        entry.time_of_last_update = chrono::Utc::now();
-        // TODO: transaction aware db update
-        db.remove(&crate_name)
-            .with_context(|| "could not remove entry from cache")?;
-        db.insert(
-            &crate_name,
-            bincode::serialize(&entry).with_context(|| "could not serialise cache entry")?,
-        )
-        .with_context(|| "could not insert cache entry")?;
-    } else {
-        // If it doesn't exist, create a new entry
-        let entry = Entry {
-            versions: vec![UploadedPackage {
+            // Check that it is valid to upload this version
+            let new_version = Version::parse(&metadata.vers)?;
+            for version in &entry.versions {
+                let existing_version = Version::parse(&version.pkg.vers)?;
+                if new_version == existing_version {
+                    return create_error("attempted to upload existing version");
+                }
+                if new_version < existing_version {
+                    return create_error("attempted to upload older version");
+                }
+            }
+
+            // Add this version
+            entry.versions.push(UploadedPackage {
                 pkg: metadata.to_package(cksum),
                 upload_meta: Some(metadata),
                 upload_timestamp: Some(chrono::Utc::now()),
-            }],
-            time_of_last_update: chrono::Utc::now(),
-            is_local: true,
-        };
-        db.insert(
-            &crate_name,
-            bincode::serialize(&entry).with_context(|| "could not serialise cache entry")?,
-        )
-        .with_context(|| "could not insert cache entry")?;
+            });
+            entry.time_of_last_update = chrono::Utc::now();
+            db.insert_crate(&crate_name, entry)?;
+        }
+        None => {
+            // If it doesn't exist, create a new entry
+            let entry = Entry {
+                versions: vec![UploadedPackage {
+                    pkg: metadata.to_package(cksum),
+                    upload_meta: Some(metadata),
+                    upload_timestamp: Some(chrono::Utc::now()),
+                }],
+                time_of_last_update: chrono::Utc::now(),
+                is_local: true,
+            };
+            db.insert_crate(&crate_name, entry)?;
+        }
     }
 
     // Store crate file
