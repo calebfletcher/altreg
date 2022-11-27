@@ -49,26 +49,26 @@ impl Db {
     pub fn get_crate(&self, crate_name: &str) -> Result<Option<Entry>, anyhow::Error> {
         self.crate_tree
             .get(crate_name)
-            .with_context(|| "could not access cache entry")?
+            .with_context(|| "could not access crate entry")?
             .map(|raw| bincode::deserialize(&raw))
             .transpose()
-            .with_context(|| "could not deserialise metadata in cache entry")
+            .with_context(|| "could not deserialise metadata in crate entry")
     }
 
     pub fn remove_crate(&self, crate_name: &str) -> Result<(), anyhow::Error> {
         self.crate_tree
             .remove(crate_name)
-            .with_context(|| "could not remove entry from cache")
+            .with_context(|| "could not remove crate")
             .map(|_| ())
     }
 
-    pub fn insert_crate(&self, crate_name: &str, entry: Entry) -> Result<(), anyhow::Error> {
+    pub fn insert_crate(&self, crate_name: &str, entry: &Entry) -> Result<(), anyhow::Error> {
         self.crate_tree
             .insert(
                 crate_name,
-                bincode::serialize(&entry).with_context(|| "could not serialise cache entry")?,
+                bincode::serialize(entry).with_context(|| "could not serialise crate entry")?,
             )
-            .with_context(|| "could not insert cache entry")
+            .with_context(|| "could not insert crate")
             .map(|_| ())
     }
 

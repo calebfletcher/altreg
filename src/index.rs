@@ -96,7 +96,7 @@ async fn crate_metadata(
     };
 
     // Insert binary representation into database
-    db.insert_crate(crate_name, entry)?;
+    db.insert_crate(crate_name, &entry)?;
 
     Ok((StatusCode::OK, upstream))
 }

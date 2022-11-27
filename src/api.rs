@@ -86,7 +86,7 @@ async fn add_crate(
                 })
             }
             entry.time_of_last_update = chrono::Utc::now();
-            db.insert_crate(&crate_name, entry)?;
+            db.insert_crate(&crate_name, &entry)?;
         }
         None => {
             // If it doesn't exist, create a new entry
@@ -99,7 +99,7 @@ async fn add_crate(
                 time_of_last_update: chrono::Utc::now(),
                 is_local: true,
             };
-            db.insert_crate(&crate_name, entry)?;
+            db.insert_crate(&crate_name, &entry)?;
         }
     }
 
