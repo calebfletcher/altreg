@@ -1,4 +1,5 @@
 mod api;
+mod auth;
 mod config;
 mod db;
 mod dl;
@@ -8,6 +9,7 @@ mod mirror;
 mod package;
 mod ui;
 
+use axum_extra::extract::cookie;
 use db::Db;
 
 use std::{
@@ -57,6 +59,7 @@ impl<T: Into<anyhow::Error>> From<T> for InternalError {
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
+    cookie_key: cookie::Key,
     config: Config,
     db: db::Db,
     templates: Tera,
@@ -97,6 +100,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         .merge(ui::router(&config.data_dir))
         .merge(dl::router())
+        .merge(auth::router())
         .nest("/index", index::router())
         .nest("/api", api::router())
         .nest_service(
@@ -115,6 +119,7 @@ async fn main() -> Result<(), anyhow::Error> {
             db,
             templates: tera,
             docs_queue_tx,
+            cookie_key: cookie::Key::generate(),
         })
         .layer(
             TraceLayer::new_for_http()
