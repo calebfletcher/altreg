@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Context};
 use tracing::warn;
 
-use crate::Entry;
+use crate::{auth, Entry};
 
 const DB_VERSION: u32 = 2;
 static DB_VERSION_KEY: &str = "version";
@@ -11,6 +11,7 @@ static DB_VERSION_KEY: &str = "version";
 #[derive(Debug, Clone)]
 pub struct Db {
     crate_tree: sled::Tree,
+    user_tree: sled::Tree,
 }
 
 impl Db {
@@ -42,8 +43,12 @@ impl Db {
         }
 
         let crate_tree = db.open_tree("crates")?;
+        let user_tree = db.open_tree("users")?;
 
-        Ok(Db { crate_tree })
+        Ok(Db {
+            crate_tree,
+            user_tree,
+        })
     }
 
     pub fn get_crate(&self, crate_name: &str) -> Result<Option<Entry>, anyhow::Error> {
@@ -74,5 +79,28 @@ impl Db {
 
     pub fn iter_crates(&self) -> sled::Iter {
         self.crate_tree.iter()
+    }
+
+    pub fn get_user(&self, username: &str) -> Result<Option<auth::User>, anyhow::Error> {
+        self.crate_tree
+            .get(username)
+            .with_context(|| "could not access user entry")?
+            .map(|raw| bincode::deserialize(&raw))
+            .transpose()
+            .with_context(|| "could not deserialise user entry")
+    }
+
+    pub fn insert_user(&self, username: &str, user: &auth::User) -> Result<(), anyhow::Error> {
+        self.crate_tree
+            .insert(
+                username,
+                bincode::serialize(user).with_context(|| "could not serialise user entry")?,
+            )
+            .with_context(|| "could not insert user")
+            .map(|_| ())
+    }
+
+    pub fn iter_users(&self) -> sled::Iter {
+        self.user_tree.iter()
     }
 }
