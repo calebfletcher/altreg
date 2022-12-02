@@ -3,8 +3,8 @@ use axum::{
     async_trait,
     extract::{FromRef, FromRequestParts, State},
     http::request::Parts,
-    response::{IntoResponse, Redirect, Response},
-    routing::{get, post},
+    response::{Html, IntoResponse, Redirect, Response},
+    routing::get,
     Form, Router,
 };
 use axum_extra::extract::{
@@ -14,7 +14,7 @@ use axum_extra::extract::{
 use rand::rngs::OsRng;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::{AppState, InternalError};
 
@@ -31,8 +31,12 @@ pub struct User {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/me", get(auth_me))
-        .route("/auth", post(auth_login_page))
+        .route("/auth/login", get(auth_login_page).post(auth_login))
         .route("/auth/logout", get(auth_logout))
+        .route(
+            "/auth/register",
+            get(auth_register_page).post(auth_register),
+        )
 }
 
 async fn auth_me(AuthSession(username, jar): AuthSession) -> (PrivateCookieJar, String) {
@@ -45,8 +49,9 @@ struct LoginParams {
     password: String,
 }
 
-async fn auth_login_page(
+async fn auth_login(
     State(db): State<crate::Db>,
+    State(tera): State<tera::Tera>,
     session: Result<AuthSession, UnauthSession>,
     Form(login): Form<LoginParams>,
 ) -> Result<Response, InternalError> {
@@ -60,15 +65,7 @@ async fn auth_login_page(
 
     let Some(user) = db.get_user(&login.username)? else {
         // User doesn't exist in database
-
-        // TODO: don't create a user lmao
-        let salt = argon2::password_hash::SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-        let password_hash = argon2.hash_password(login.password.as_bytes(), &salt)?.to_string();
-        let user = User { username: login.username, password: password_hash, blocked: false };
-        db.insert_user(&user.username, &user)?;
-
-        return Ok((StatusCode::UNAUTHORIZED, jar, "non-existent user").into_response())
+        return auth_login_page(State(tera), Some("non-existent user".into())).await.map(|resp| resp.into_response());
     };
 
     // Check user password
@@ -78,17 +75,35 @@ async fn auth_login_page(
         .is_err()
     {
         // Incorrect password
-        return Ok((StatusCode::UNAUTHORIZED, jar, "incorrect password").into_response());
+        return auth_login_page(State(tera), Some("incorrect password".into()))
+            .await
+            .map(|resp| resp.into_response());
     }
 
     if user.blocked {
-        return Ok((StatusCode::FORBIDDEN, jar, "user blocked").into_response());
+        return auth_login_page(State(tera), Some("user blocked".into()))
+            .await
+            .map(|resp| resp.into_response());
     }
 
+    info!("user {} logged in", login.username);
+
     // Set cookies
-    let jar = jar.add(Cookie::new(COOKIE_NAME, login.username));
+    let jar = set_auth_cookie(jar, login.username);
 
     Ok((StatusCode::OK, jar, "auth success").into_response())
+}
+
+async fn auth_login_page(
+    State(tera): State<tera::Tera>,
+    warning: Option<String>,
+) -> Result<Html<String>, InternalError> {
+    let mut context = tera::Context::new();
+    if let Some(warning) = warning {
+        context.insert("warning", &warning);
+    }
+    let body = tera.render("login.html", &context)?;
+    Ok(Html(body))
 }
 
 async fn auth_logout(
@@ -105,6 +120,76 @@ async fn auth_logout(
     };
 
     (jar, Redirect::temporary("/"))
+}
+
+#[derive(Deserialize)]
+struct RegisterParams {
+    username: String,
+    password: String,
+}
+async fn auth_register(
+    State(db): State<crate::Db>,
+    State(tera): State<tera::Tera>,
+    session: Result<AuthSession, UnauthSession>,
+    Form(login): Form<RegisterParams>,
+) -> Result<Response, InternalError> {
+    let jar = match session {
+        Ok(AuthSession(_username, jar)) => {
+            // User already has a cookie, check if it has expired
+            return Ok((StatusCode::OK, jar, Redirect::temporary("/")).into_response());
+        }
+        Err(UnauthSession(jar)) => jar,
+    };
+
+    if db.get_user(&login.username)?.is_some() {
+        // User already exists in database
+        return auth_register_page(State(tera), Some("user already exists".into()))
+            .await
+            .map(|resp| resp.into_response());
+    };
+
+    // Hash password
+    let salt = argon2::password_hash::SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(login.password.as_bytes(), &salt)?
+        .to_string();
+
+    // Create user in database
+    let user = User {
+        username: login.username.clone(),
+        password: password_hash,
+        blocked: false,
+    };
+    db.insert_user(&user.username, &user)?;
+
+    info!("user {} registered", login.username);
+
+    // Set cookie
+    let jar = set_auth_cookie(jar, login.username);
+
+    Ok((StatusCode::OK, jar, "register success").into_response())
+}
+
+async fn auth_register_page(
+    State(tera): State<tera::Tera>,
+    warning: Option<String>,
+) -> Result<Html<String>, InternalError> {
+    let mut context = tera::Context::new();
+    if let Some(warning) = warning {
+        context.insert("warning", &warning);
+    }
+    let body = tera.render("register.html", &context)?;
+    Ok(Html(body))
+}
+
+fn set_auth_cookie(jar: PrivateCookieJar, username: String) -> PrivateCookieJar {
+    jar.add(
+        Cookie::build(COOKIE_NAME, username)
+            .path("/")
+            .http_only(true)
+            .finish(),
+    )
 }
 
 struct AuthSession(String, PrivateCookieJar);
@@ -129,7 +214,6 @@ where
         };
 
         let username = cookie.value();
-        let jar = jar.remove(Cookie::named(COOKIE_NAME));
 
         // TODO: check auth is valid
 

@@ -82,7 +82,7 @@ impl Db {
     }
 
     pub fn get_user(&self, username: &str) -> Result<Option<auth::User>, anyhow::Error> {
-        self.crate_tree
+        self.user_tree
             .get(username)
             .with_context(|| "could not access user entry")?
             .map(|raw| bincode::deserialize(&raw))
@@ -91,7 +91,7 @@ impl Db {
     }
 
     pub fn insert_user(&self, username: &str, user: &auth::User) -> Result<(), anyhow::Error> {
-        self.crate_tree
+        self.user_tree
             .insert(
                 username,
                 bincode::serialize(user).with_context(|| "could not serialise user entry")?,
