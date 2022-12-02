@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="warning">{{warning}}</div>
+
+<form method="post" action="/auth/register">
+    <input name="username" type="text" />
+    <input name="password" type="password" />
+    <input type="submit" value="Register" />
+</form>
+
+{% endblock content %}
