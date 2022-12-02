@@ -63,7 +63,7 @@ async fn auth_login(
     let jar = match session {
         Ok(AuthSession(_username, jar)) => {
             // User already has a cookie, check if it has expired
-            return Ok((StatusCode::OK, jar, Redirect::temporary("/")).into_response());
+            return Ok((StatusCode::OK, jar, Redirect::to("/")).into_response());
         }
         Err(UnauthSession(jar)) => jar,
     };
@@ -124,7 +124,7 @@ async fn auth_logout(
         Err(UnauthSession(jar)) => jar,
     };
 
-    (jar, Redirect::temporary("/"))
+    (jar, Redirect::to("/"))
 }
 
 #[derive(Deserialize)]
@@ -141,7 +141,7 @@ async fn auth_register(
     let jar = match session {
         Ok(AuthSession(_username, jar)) => {
             // User already has a cookie, check if it has expired
-            return Ok((StatusCode::OK, jar, Redirect::temporary("/")).into_response());
+            return Ok((StatusCode::OK, jar, Redirect::to("/")).into_response());
         }
         Err(UnauthSession(jar)) => jar,
     };

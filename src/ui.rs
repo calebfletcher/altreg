@@ -54,7 +54,7 @@ async fn crate_list(
 }
 
 async fn root() -> Redirect {
-    Redirect::permanent("/crates")
+    Redirect::temporary("/crates")
 }
 
 async fn crate_root(Path(crate_name): Path<String>) -> Redirect {
