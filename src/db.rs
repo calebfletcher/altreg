@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Context};
 use tracing::warn;
 
-use crate::{auth, Entry};
+use crate::{auth, token::TokenEntry, Entry};
 
 const DB_VERSION: u32 = 2;
 static DB_VERSION_KEY: &str = "version";
@@ -12,6 +12,7 @@ static DB_VERSION_KEY: &str = "version";
 pub struct Db {
     crate_tree: sled::Tree,
     user_tree: sled::Tree,
+    token_tree: sled::Tree,
 }
 
 impl Db {
@@ -44,10 +45,12 @@ impl Db {
 
         let crate_tree = db.open_tree("crates")?;
         let user_tree = db.open_tree("users")?;
+        let token_tree = db.open_tree("tokens")?;
 
         Ok(Db {
             crate_tree,
             user_tree,
+            token_tree,
         })
     }
 
@@ -102,5 +105,40 @@ impl Db {
 
     pub fn iter_users(&self) -> sled::Iter {
         self.user_tree.iter()
+    }
+
+    pub fn get_token_user(&self, token: &[u8]) -> Result<Option<auth::User>, anyhow::Error> {
+        self.token_tree
+            .get(token)
+            .with_context(|| "could not access token entry")?
+            .map(|raw| bincode::deserialize::<TokenEntry>(&raw))
+            .transpose()
+            .with_context(|| "could not deserialise token entry")
+            .and_then(|entry| {
+                Ok(entry
+                    .map(|entry| self.get_user(entry.username()))
+                    .transpose()
+                    .with_context(|| "could not get user entry")?
+                    .flatten())
+            })
+    }
+
+    pub fn insert_token(&self, token: &[u8], entry: &TokenEntry) -> Result<(), anyhow::Error> {
+        self.token_tree
+            .insert(
+                token,
+                bincode::serialize(entry).with_context(|| "could not serialise token entry")?,
+            )
+            .with_context(|| "could not insert token")
+            .map(|_| ())
+    }
+
+    pub fn iter_tokens(&self) -> sled::Iter {
+        self.token_tree.iter()
+    }
+
+    pub fn delete_token(&self, token: &[u8]) -> Result<(), anyhow::Error> {
+        self.token_tree.remove(token)?;
+        Ok(())
     }
 }

@@ -7,6 +7,7 @@ mod docs;
 mod index;
 mod mirror;
 mod package;
+mod token;
 mod ui;
 
 use axum_extra::extract::cookie;

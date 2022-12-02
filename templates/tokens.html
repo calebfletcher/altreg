@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if token %}
+<pre class="token">{{token}}</pre>
+{% endif %}
+
+<form method="post" action="/auth/tokens">
+    <input name="label" type="text" />
+    <input type="submit" value="Create Token" />
+</form>
+
+<ul>
+    {% for entry in token_entries %}
+    <li>{{entry.label}}
+        <form method="post" action="/auth/tokens/delete">
+            <input type="hidden" name="label" value="{{entry.label}}" />
+            <input type="submit" value="Delete" />
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+
+{% endblock content %}

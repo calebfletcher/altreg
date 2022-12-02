@@ -4,7 +4,7 @@ use axum::{
     extract::{FromRef, FromRequestParts, State},
     http::request::Parts,
     response::{Html, IntoResponse, Redirect, Response},
-    routing::get,
+    routing::{get, post},
     Form, Router,
 };
 use axum_extra::extract::{
@@ -16,7 +16,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::{AppState, InternalError};
+use crate::{token, AppState, InternalError};
 
 static COOKIE_NAME: &str = "altreg_session";
 
@@ -31,6 +31,11 @@ pub struct User {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/me", get(auth_me))
+        .route(
+            "/auth/tokens",
+            get(auth_tokens_page).post(auth_token_create),
+        )
+        .route("/auth/tokens/delete", post(auth_tokens_delete))
         .route("/auth/login", get(auth_login_page).post(auth_login))
         .route("/auth/logout", get(auth_logout))
         .route(
@@ -181,6 +186,48 @@ async fn auth_register_page(
     }
     let body = tera.render("register.html", &context)?;
     Ok(Html(body))
+}
+
+#[derive(Deserialize)]
+struct TokenParams {
+    label: String,
+}
+async fn auth_token_create(
+    AuthSession(username, jar): AuthSession,
+    State(db): State<crate::Db>,
+    State(tera): State<tera::Tera>,
+    Form(params): Form<TokenParams>,
+) -> Result<impl IntoResponse, InternalError> {
+    let token = token::create_token(&db, &username, &params.label)?;
+
+    auth_tokens_page(AuthSession(username, jar), State(db), State(tera), token).await
+}
+
+async fn auth_tokens_page(
+    AuthSession(username, jar): AuthSession,
+    State(db): State<crate::Db>,
+    State(tera): State<tera::Tera>,
+    token: Option<String>,
+) -> Result<impl IntoResponse, InternalError> {
+    let mut context = tera::Context::new();
+    if let Some(token) = token {
+        context.insert("token", &token);
+    }
+
+    context.insert("token_entries", &token::get_user_tokens(&db, &username)?);
+
+    let body = tera.render("tokens.html", &context)?;
+    Ok((jar, Html(body)))
+}
+
+async fn auth_tokens_delete(
+    AuthSession(username, jar): AuthSession,
+    State(db): State<crate::Db>,
+    Form(params): Form<TokenParams>,
+) -> Result<impl IntoResponse, InternalError> {
+    token::delete(&db, &username, &params.label)?;
+
+    Ok((jar, Redirect::to("/auth/tokens")))
 }
 
 fn set_auth_cookie(jar: PrivateCookieJar, username: String) -> PrivateCookieJar {
