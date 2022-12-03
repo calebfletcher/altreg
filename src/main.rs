@@ -11,7 +11,7 @@ mod token;
 mod ui;
 
 use axum_extra::extract::cookie;
-use axum_server::tls_rustls::RustlsConfig;
+use axum_server::{tls_rustls::RustlsConfig, HttpConfig};
 use db::Db;
 
 use std::{
@@ -99,6 +99,10 @@ async fn main() -> Result<(), anyhow::Error> {
         Tera::new("templates/**.html").with_context(|| "unable to load templates".to_owned())?;
     let listen_addr = SocketAddr::new(config.host, config.port);
 
+    let tls_config = RustlsConfig::from_pem_file(&config.tls_cert, &config.tls_key)
+        .await
+        .unwrap();
+
     let app = Router::new()
         .merge(ui::router(&config.data_dir))
         .merge(dl::router())
@@ -131,6 +135,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let http_config = HttpConfig::new().http2_only(true).build();
 
     axum_server::bind_rustls(listen_addr, tls_config)
+        .http_config(http_config)
         .serve(app.into_make_service())
         .await?;
 
