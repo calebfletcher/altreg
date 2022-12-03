@@ -11,6 +11,7 @@ mod token;
 mod ui;
 
 use axum_extra::extract::cookie;
+use axum_server::tls_rustls::RustlsConfig;
 use db::Db;
 
 use std::{
@@ -127,7 +128,11 @@ async fn main() -> Result<(), anyhow::Error> {
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),
         );
 
-    axum_server::bind(listen_addr)
+    let config = RustlsConfig::from_pem_file("localhost.pem", "localhost-key.pem")
+        .await
+        .unwrap();
+
+    axum_server::bind_rustls(listen_addr, config)
         .serve(app.into_make_service())
         .await?;
 
