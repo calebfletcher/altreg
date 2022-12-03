@@ -127,7 +127,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),
         );
 
-    axum::Server::bind(&listen_addr)
+    axum_server::bind(listen_addr)
         .serve(app.into_make_service())
         .await?;
 
