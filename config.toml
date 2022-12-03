@@ -3,3 +3,6 @@ port = 1491
 data_dir = "/var/lib/altreg"
 external_url = "https://localhost:1491"
 offline = true
+
+tls_cert = "localhost.pem"
+tls_key = "localhost-key.pem"

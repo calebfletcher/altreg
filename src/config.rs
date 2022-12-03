@@ -10,6 +10,8 @@ pub struct Config {
     pub data_dir: PathBuf,
     pub external_url: String,
     pub offline: bool,
+    pub tls_cert: PathBuf,
+    pub tls_key: PathBuf,
 }
 
 pub fn load() -> Result<Config, anyhow::Error> {

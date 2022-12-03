@@ -128,11 +128,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),
         );
 
-    let config = RustlsConfig::from_pem_file("localhost.pem", "localhost-key.pem")
-        .await
-        .unwrap();
+    let http_config = HttpConfig::new().http2_only(true).build();
 
-    axum_server::bind_rustls(listen_addr, config)
+    axum_server::bind_rustls(listen_addr, tls_config)
         .serve(app.into_make_service())
         .await?;
 
