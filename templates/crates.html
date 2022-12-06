@@ -2,7 +2,7 @@
 {% block content %}
 
 <div id="crate-list">
-    {% for crate in crates %}
+    {% for crate, entry in crates %}
     <div class="crate-box">
         <a href="/crates/{{crate}}">{{crate}}</a>
     </div>

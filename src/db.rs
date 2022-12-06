@@ -80,8 +80,16 @@ impl Db {
             .map(|_| ())
     }
 
-    pub fn iter_crates(&self) -> sled::Iter {
-        self.crate_tree.iter()
+    pub fn iter_crates(&self) -> impl Iterator<Item = (String, Entry)> {
+        self.crate_tree
+            .iter()
+            .filter_map(|elem| elem.ok())
+            .map(|(name, entry)| {
+                (
+                    String::from_utf8_lossy(&name).to_string(),
+                    bincode::deserialize(&entry).expect("crate entries be valid to deserialize"),
+                )
+            })
     }
 
     pub fn get_user(&self, username: &str) -> Result<Option<auth::User>, anyhow::Error> {

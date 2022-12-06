@@ -39,11 +39,9 @@ async fn crate_list(
 ) -> Result<Html<String>, InternalError> {
     let filter = params.get("q");
 
-    let crates: Vec<String> = db
+    let crates: HashMap<_, _> = db
         .iter_crates()
-        .filter_map(|elem| elem.ok())
-        .map(|(crate_name, _)| String::from_utf8_lossy(&crate_name).to_string())
-        .filter(|crate_name| filter.map_or(true, |filter| crate_name.contains(filter)))
+        .filter(|(crate_name, _)| filter.map_or(true, |filter| crate_name.contains(filter)))
         .collect();
 
     let mut context = tera::Context::new();
