@@ -28,7 +28,8 @@ async fn add_crate(
 ) -> Result<(StatusCode, Json<Value>), InternalError> {
     info!(
         "user {} attempting to upload crate using token {}",
-        user.username, token.label
+        user.username,
+        token.label()
     );
     if body.len() < 4 {
         return create_error("body too short");

@@ -16,7 +16,7 @@ use crate::{auth, db};
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenEntry {
     username: String,
-    pub label: String,
+    label: String,
 }
 
 impl TokenEntry {
