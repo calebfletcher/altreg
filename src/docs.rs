@@ -39,7 +39,7 @@ pub fn start_background_thread(
             build_dir.purge().unwrap();
 
             // Fetch crate from registry
-            let mut registry = AlternativeRegistry::new("sparse+http://localhost:1491/index/");
+            let mut registry = AlternativeRegistry::new("sparse+https://localhost:1491/index/");
             registry.sparse();
             let krate = Crate::registry(registry, &name, &version);
             krate.fetch(&workspace).unwrap();

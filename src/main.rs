@@ -132,7 +132,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .make_span_with(DefaultMakeSpan::default().include_headers(false)),
         );
 
-    let http_config = HttpConfig::new().http2_only(true).build();
+    let http_config = HttpConfig::new().build();
 
     axum_server::bind_rustls(listen_addr, tls_config)
         .http_config(http_config)
