@@ -22,10 +22,10 @@ static COOKIE_NAME: &str = "altreg_session";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    username: String,
+    pub username: String,
     /// Argon2id hashed password
     password: String,
-    blocked: bool,
+    pub blocked: bool,
 }
 
 pub fn router() -> Router<AppState> {
@@ -270,6 +270,6 @@ where
 
 impl IntoResponse for UnauthSession {
     fn into_response(self) -> Response {
-        (StatusCode::UNAUTHORIZED, self.0, "unauthorized").into_response()
+        (self.0, Redirect::to("/auth/login")).into_response()
     }
 }

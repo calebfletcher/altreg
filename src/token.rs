@@ -1,13 +1,22 @@
+use axum::{
+    async_trait,
+    extract::{FromRef, FromRequestParts},
+    http::request::Parts,
+    response::{IntoResponse, Response},
+    Json,
+};
 use rand::{rngs::OsRng, RngCore};
+use reqwest::{header, StatusCode};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::db;
+use crate::{auth, db};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenEntry {
     username: String,
-    label: String,
+    pub label: String,
 }
 
 impl TokenEntry {
@@ -50,7 +59,10 @@ pub fn create_token(
     Ok(Some(bs58::encode(token).into_string()))
 }
 
-pub fn lookup_token(db: &db::Db, token: &str) -> Result<Option<crate::auth::User>, anyhow::Error> {
+pub fn lookup_token(
+    db: &db::Db,
+    token: &str,
+) -> Result<Option<(TokenEntry, auth::User)>, anyhow::Error> {
     let hashed_token = Sha256::digest(bs58::decode(token).into_vec()?);
     db.get_token_user(&hashed_token)
 }
@@ -91,4 +103,34 @@ pub fn delete(db: &db::Db, username: &str, label: &str) -> Result<(), anyhow::Er
     }
 
     Ok(())
+}
+
+pub struct ApiAuth(pub TokenEntry, pub auth::User);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for ApiAuth
+where
+    S: Send + Sync + Clone,
+    db::Db: FromRef<S>,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // Get token from header
+        let Some(token) = parts.headers.get(header::AUTHORIZATION) else {
+            return Err((StatusCode::FORBIDDEN, Json(json!({ "errors": [{"detail": "missing authorization token"}]}))).into_response());
+        };
+
+        // Ensure token is a valid string
+        let Ok(token) = token.to_str() else {
+            return Err((StatusCode::FORBIDDEN, Json(json!({ "errors": [{"detail": "invalid authorization token"}]}))).into_response());
+        };
+
+        // Check token is known
+        let Ok(Some((entry, user))) = lookup_token(&db::Db::from_ref(state), token) else {
+            return Err((StatusCode::FORBIDDEN, Json(json!({ "errors": [{"detail": "invalid authorization token"}]}))).into_response());
+        };
+
+        Ok(ApiAuth(entry, user))
+    }
 }

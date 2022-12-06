@@ -5,12 +5,13 @@ use semver::Version;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::{fs::File, io::AsyncWriteExt, sync::mpsc::UnboundedSender};
-use tracing::debug;
+use tracing::info;
 
 use crate::{
     config::Config,
     crate_path,
     package::{self, UploadedPackage},
+    token::ApiAuth,
     AppState, Entry, InternalError,
 };
 
@@ -19,12 +20,16 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn add_crate(
+    ApiAuth(token, user): ApiAuth,
     State(db): State<crate::Db>,
     State(state): State<Config>,
     State(docs_queue_tx): State<UnboundedSender<(String, String)>>,
     body: Bytes,
 ) -> Result<(StatusCode, Json<Value>), InternalError> {
-    debug!("attempting to upload crate");
+    info!(
+        "user {} attempting to upload crate using token {}",
+        user.username, token.label
+    );
     if body.len() < 4 {
         return create_error("body too short");
     }

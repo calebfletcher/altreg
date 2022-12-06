@@ -107,7 +107,10 @@ impl Db {
         self.user_tree.iter()
     }
 
-    pub fn get_token_user(&self, token: &[u8]) -> Result<Option<auth::User>, anyhow::Error> {
+    pub fn get_token_user(
+        &self,
+        token: &[u8],
+    ) -> Result<Option<(TokenEntry, auth::User)>, anyhow::Error> {
         self.token_tree
             .get(token)
             .with_context(|| "could not access token entry")?
@@ -116,7 +119,10 @@ impl Db {
             .with_context(|| "could not deserialise token entry")
             .and_then(|entry| {
                 Ok(entry
-                    .map(|entry| self.get_user(entry.username()))
+                    .map(|entry| {
+                        self.get_user(entry.username())
+                            .map(|user| user.map(|user| (entry, user)))
+                    })
                     .transpose()
                     .with_context(|| "could not get user entry")?
                     .flatten())
