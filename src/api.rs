@@ -1,12 +1,13 @@
 use anyhow::anyhow;
 use axum::{
     body::Bytes,
-    extract::{Path, State},
-    routing::{delete, put},
+    extract::{Path, Query, State},
+    routing::{delete, get, put},
     Json, Router,
 };
 use reqwest::StatusCode;
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::{fs::File, io::AsyncWriteExt, sync::mpsc::UnboundedSender};
@@ -22,6 +23,7 @@ use crate::{
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/v1/crates", get(search_crates))
         .route("/v1/crates/new", put(add_crate))
         .route("/v1/crates/:crate_name/:version/yank", delete(yank_crate))
         .route("/v1/crates/:crate_name/:version/unyank", put(unyank_crate))
@@ -225,4 +227,61 @@ async fn unyank_crate(
     db.insert_crate(&crate_name, &entry)?;
 
     Ok((StatusCode::OK, Json(json!({"ok": true}))))
+}
+
+#[derive(Serialize)]
+struct SearchResult {
+    name: String,
+    max_version: String,
+    description: String,
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+    per_page: usize,
+}
+
+async fn search_crates(
+    State(db): State<crate::Db>,
+    Query(search_query): Query<SearchQuery>,
+) -> Result<(StatusCode, Json<Value>), InternalError> {
+    let crates: Vec<_> = db
+        .iter_crates()
+        .filter(|(name, _entry)| name.contains(&search_query.q))
+        .collect();
+
+    let total_count = crates.len();
+
+    let crates: Vec<_> = crates
+        .into_iter()
+        .take(search_query.per_page)
+        .map(|(name, entry)| {
+            let most_recent = entry
+                .versions
+                .last()
+                .expect("crate has at least one version");
+            SearchResult {
+                name,
+                max_version: most_recent.pkg.vers.clone(),
+                description: most_recent
+                    .upload_meta
+                    .as_ref()
+                    .and_then(|meta| meta.description.clone())
+                    .unwrap_or_else(|| "".to_owned()),
+            }
+        })
+        .collect();
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            // Array of results.
+            "crates": crates,
+            "meta": {
+                // Total number of results available on the server.
+                "total": total_count
+            }
+        })),
+    ))
 }
