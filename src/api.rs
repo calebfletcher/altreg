@@ -1,5 +1,10 @@
 use anyhow::anyhow;
-use axum::{body::Bytes, extract::State, routing::put, Json, Router};
+use axum::{
+    body::Bytes,
+    extract::{Path, State},
+    routing::{delete, put},
+    Json, Router,
+};
 use reqwest::StatusCode;
 use semver::Version;
 use serde_json::{json, Value};
@@ -16,7 +21,17 @@ use crate::{
 };
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/v1/crates/new", put(add_crate))
+    Router::new()
+        .route("/v1/crates/new", put(add_crate))
+        .route("/v1/crates/:crate_name/:version/yank", delete(yank_crate))
+        .route("/v1/crates/:crate_name/:version/unyank", put(unyank_crate))
+}
+
+fn create_error(msg: &str) -> Result<(StatusCode, Json<Value>), InternalError> {
+    Ok((
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "errors": [{"detail": msg}]})),
+    ))
 }
 
 async fn add_crate(
@@ -126,9 +141,88 @@ async fn add_crate(
     Ok((StatusCode::OK, Json(json!({}))))
 }
 
-fn create_error(msg: &str) -> Result<(StatusCode, Json<Value>), InternalError> {
-    Ok((
-        StatusCode::BAD_REQUEST,
-        Json(json!({ "errors": [{"detail": msg}]})),
-    ))
+async fn yank_crate(
+    ApiAuth(token, user): ApiAuth,
+    State(db): State<crate::Db>,
+    Path((crate_name, version)): Path<(String, String)>,
+) -> Result<(StatusCode, Json<Value>), InternalError> {
+    info!(
+        "user {} attempting to yank crate {}@{} using token {}",
+        user.username,
+        crate_name,
+        version,
+        token.label()
+    );
+
+    // Check the user supplied a valid semver version
+    let Ok(yank_version) = Version::parse(&version) else {
+        return create_error("invalid crate version supplied");
+    };
+
+    // Get the crate
+    let Some(mut entry) = db.get_crate(&crate_name)? else {
+        return create_error("crate does not exist in index");
+    };
+
+    // Find the package to yank
+    let Some(package) = entry.versions.iter_mut().find(|version| {
+        Version::parse(&version.pkg.vers).expect("all existing versions have valid identifiers")
+            == yank_version
+    }) else {
+        return create_error("crate does not have the specified version published");
+    };
+
+    if package.pkg.yanked {
+        return create_error("version has already been yanked");
+    }
+
+    package.pkg.yanked = true;
+
+    // Reinsert the crate into the database
+    db.insert_crate(&crate_name, &entry)?;
+
+    Ok((StatusCode::OK, Json(json!({"ok": true}))))
+}
+
+async fn unyank_crate(
+    ApiAuth(token, user): ApiAuth,
+    State(db): State<crate::Db>,
+    Path((crate_name, version)): Path<(String, String)>,
+) -> Result<(StatusCode, Json<Value>), InternalError> {
+    info!(
+        "user {} attempting to unyank crate {}@{} using token {}",
+        user.username,
+        crate_name,
+        version,
+        token.label()
+    );
+
+    // Check the user supplied a valid semver version
+    let Ok(yank_version) = Version::parse(&version) else {
+        return create_error("invalid crate version supplied");
+    };
+
+    // Get the crate
+    let Some(mut entry) = db.get_crate(&crate_name)? else {
+        return create_error("crate does not exist in index");
+    };
+
+    // Find the package to unyank
+    let Some(package) = entry.versions.iter_mut().find(|version| {
+        Version::parse(&version.pkg.vers).expect("all existing versions have valid identifiers")
+            == yank_version
+    }) else {
+        return create_error("crate does not have the specified version published");
+    };
+
+    if !package.pkg.yanked {
+        return create_error("version has not been yanked");
+    }
+
+    package.pkg.yanked = false;
+
+    // Reinsert the crate into the database
+    db.insert_crate(&crate_name, &entry)?;
+
+    Ok((StatusCode::OK, Json(json!({"ok": true}))))
 }
