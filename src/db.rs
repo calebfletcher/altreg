@@ -80,6 +80,51 @@ impl Db {
             .map(|_| ())
     }
 
+    /// Modify a crate atomically.
+    ///
+    /// This function will call a function `f` (potentially multiple times during contention) with the result that
+    /// the change the function makes is applied atomically. If the function returns an error, then the old value is
+    /// preserved.
+    pub fn modify_crate(
+        &self,
+        crate_name: &str,
+        mut f: impl FnMut(&mut Entry) -> Result<(), anyhow::Error>,
+    ) -> Result<(), anyhow::Error> {
+        let mut err: Option<anyhow::Error> = None;
+
+        self.crate_tree
+            .update_and_fetch(crate_name, |old| match old {
+                Some(old) => {
+                    // Deserialize the entry
+                    let mut entry = bincode::deserialize(old)
+                        .expect("existing entries should be deserializable");
+
+                    // Call the user's function
+                    if let Err(e) = f(&mut entry) {
+                        err = Some(e);
+                        return Some(old.to_vec());
+                    }
+
+                    // Serialize the entry
+                    let entry = match bincode::serialize(&entry) {
+                        Ok(entry) => entry,
+                        Err(e) => {
+                            err = Some(e.into());
+                            return Some(old.to_vec());
+                        }
+                    };
+                    Some(entry)
+                }
+                None => None,
+            })?;
+
+        // Return the error if there was one
+        match err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
     pub fn iter_crates(&self) -> impl Iterator<Item = (String, Entry)> {
         self.crate_tree
             .iter()
